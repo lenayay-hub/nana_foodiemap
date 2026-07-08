@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <!-- 引入 Babel 來解析 JSX 語法 -->
-    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body { background-color: #f9fafb; font-family: system-ui, -apple-system, sans-serif; }
         /* 隱藏卷軸但保留滾動功能 */
@@ -167,7 +167,7 @@
                             ) : error ? (
                                 <div className="bg-red-50 p-6 rounded-xl text-center"><p className="text-red-600 font-bold mb-2">出錯了！</p><p className="text-sm text-red-500">{error}</p></div>
                             ) : (
-                                <>
+                                <React.Fragment>
                                     <h2 className="text-xl font-bold mb-2">搜尋結果 ({filteredRestaurants.length})</h2>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {filteredRestaurants.map((restaurant, idx) => (
@@ -193,7 +193,7 @@
                                             </div>
                                         ))}
                                     </div>
-                                </>
+                                </React.Fragment>
                             )}
                         </section>
                     </main>
