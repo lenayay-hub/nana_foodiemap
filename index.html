@@ -3,14 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EatExplorer AI - 台灣美食地圖</title>
-    <!-- 引入 Tailwind CSS 進行排版 -->
+    <title>娜娜的美食大冒險</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 React 核心 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <!-- 引入 Babel 來解析 JSX 語法 -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
     <style>
         body { 
             background-color: #0f172a; 
@@ -39,17 +36,16 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- SVG 圖示組件 ---
         const MapPin = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 0-16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
         const Star = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>;
         const Clock = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
         const DollarSign = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="22"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
         const RefreshCcw = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>;
-        const Sparkles = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>;
-        const Compass = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>;
-        const MapIcon = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line></svg>;
+        const MessageSquare = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>;
+        const Lightbulb = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.9 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg>;
+        const CheckCircle = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
+        const Edit3 = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>;
 
-        // 你的 GAS API 網址
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyKXiPyB0px2WYHW2l2CxeCID-yj2ixog9FezvrPYuzfgX9MSAtRcP-hqj3yQTTBbUi/exec';
 
         const PRICE_LEVELS = [
@@ -60,20 +56,17 @@
         ];
 
         function App() {
-            // --- 資料狀態 ---
             const [restaurants, setRestaurants] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
             const [hasSearched, setHasSearched] = useState(false);
 
-            // --- 搜尋條件狀態 ---
             const [selectedCity, setSelectedCity] = useState('');
             const [selectedDistrict, setSelectedDistrict] = useState('');
-            const [selectedFoodType, setSelectedFoodType] = useState(''); // 改為下拉選單狀態
+            const [selectedFoodType, setSelectedFoodType] = useState('');
             const [selectedPrice, setSelectedPrice] = useState('');
             const [isHiddenGem, setIsHiddenGem] = useState(false);
             const [isOpenNow, setIsOpenNow] = useState(false);
 
-            // 1. 初始化讀取與【自動分類魔法】
             useEffect(() => {
                 const fetchRestaurants = async () => {
                     try {
@@ -81,33 +74,34 @@
                         const data = await response.json();
                         
                         const formattedData = data.map(item => {
-                            let address = item['完整地址'] || item['地址'] || '';
-                            let city = item['縣市'] || '';
-                            let district = item['區域'] || '';
-                            let foodType = item['類型'] || '美食';
-
-                            // 🌟 自動分類魔法：從 Google Maps 完整地址中精準提取縣市與行政區
-                            if (address) {
-                                // 抓取台灣地址常見格式 (例如: 台北市大安區、屏東縣恆春鎮)
-                                const match = address.match(/(.{2,3}[市縣])(.{1,3}[區鎮鄉市])/);
-                                if (match) {
-                                    city = match[1];      // 強制覆蓋為精準縣市
-                                    district = match[2];  // 強制覆蓋「未知」，填入精準行政區
-                                }
+                            let aiSummaryData = null;
+                            const rawAiText = item['AI總結'] || '';
+                            
+                            // 嘗試解開 JSON 格式的三段式點評
+                            if (rawAiText.startsWith('{') && rawAiText.endsWith('}')) {
+                                try {
+                                    aiSummaryData = JSON.parse(rawAiText);
+                                } catch(e) {}
                             }
+
+                            // 隱藏版判斷：完全沒有地圖連結才是隱藏版
+                            const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
 
                             return {
                                 id: item.id || Math.random(),
                                 name: item['店名'] || '未命名餐廳',
-                                city: city.trim(),
-                                district: district.trim(),
-                                foodType: foodType.trim(),
+                                city: item['縣市'] || '',
+                                district: item['區域'] || '',
+                                foodType: item['類型'] || '美食',
                                 priceLevel: parseInt(item['價位']) || 2,
                                 rating: parseFloat(item['Google評分']) || 0,
-                                address: address,
-                                aiSummary: item['AI總結'] || '尚無 AI 點評資料。',
+                                address: item['完整地址'] || item['地址'] || '',
                                 mapUrl: item['地圖連結'] || '',
-                                image: item['照片網址'] || `https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=800&random=${item.id}`
+                                isHidden: isHidden,
+                                // 如果解得開就是物件，解不開就代表是單純的字串(例如隱藏版的歡迎詞)
+                                aiData: aiSummaryData || rawAiText, 
+                                personalNote: item['個人註解'] || '', // 對應試算表新欄位
+                                isVisited: item['是否吃過'] || ''      // 對應試算表新欄位
                             };
                         }).filter(item => item.name !== '未命名餐廳' && item.name !== '');
 
@@ -121,66 +115,39 @@
                 fetchRestaurants();
             }, []);
 
-            // 2. 自動產生動態下拉選單內容 (完全依照試算表現有資料)
             const availableCities = useMemo(() => {
-                const cities = restaurants.map(r => r.city).filter(c => c && c !== '未知');
+                const cities = restaurants.map(r => r.city).filter(c => c && c !== '隱藏版' && c !== '未知');
                 return [...new Set(cities)].sort();
             }, [restaurants]);
 
             const availableDistricts = useMemo(() => {
                 if (!selectedCity) return [];
-                const districts = restaurants.filter(r => r.city === selectedCity).map(r => r.district).filter(d => d && d !== '未知');
+                const districts = restaurants.filter(r => r.city === selectedCity).map(r => r.district).filter(d => d && d !== '未知區域');
                 return [...new Set(districts)].sort();
             }, [restaurants, selectedCity]);
 
             const availableFoodTypes = useMemo(() => {
-                const types = restaurants.map(r => r.foodType).filter(t => t && t !== '美食' && t !== '未知');
+                const types = restaurants.map(r => r.foodType).filter(t => t && t !== '美食');
                 return [...new Set(types)].sort();
             }, [restaurants]);
 
-            // 3. 篩選邏輯
             const filteredRestaurants = useMemo(() => {
                 return restaurants.filter(restaurant => {
-                    if (selectedCity && restaurant.city !== selectedCity) return false;
-                    if (selectedDistrict && restaurant.district !== selectedDistrict) return false;
-                    if (selectedFoodType && restaurant.foodType !== selectedFoodType) return false;
-                    if (selectedPrice && restaurant.priceLevel !== parseInt(selectedPrice)) return false;
-                    
                     if (isHiddenGem) {
-                        const isHidden = restaurant.rating === 0 || !restaurant.mapUrl;
-                        if (!isHidden) return false;
+                        if (!restaurant.isHidden) return false;
+                    } else {
+                        // 正常搜尋時，過濾掉隱藏版，且套用條件
+                        if (restaurant.isHidden) return false;
+                        if (selectedCity && restaurant.city !== selectedCity) return false;
+                        if (selectedDistrict && restaurant.district !== selectedDistrict) return false;
+                        if (selectedFoodType && restaurant.foodType !== selectedFoodType) return false;
+                        if (selectedPrice && restaurant.priceLevel !== parseInt(selectedPrice)) return false;
                     }
-                    if (isOpenNow) {
-                        // 預留營業中邏輯
-                    }
-                    
                     return true;
                 });
             }, [restaurants, selectedCity, selectedDistrict, selectedFoodType, selectedPrice, isHiddenGem, isOpenNow]);
 
             const renderPrice = (level) => Array(Math.min(Math.max(level, 1), 4)).fill('$').join('');
-
-            const handleSearch = () => {
-                setHasSearched(true);
-                window.scrollTo(0, 0);
-            };
-
-            const resetSearch = () => {
-                setHasSearched(false);
-            };
-
-            const generateAIIntro = () => {
-                let intro = "哈囉！很高興能擔任您的台灣在地美食導遊！";
-                if (selectedCity) intro += `要在${selectedCity}${selectedDistrict}尋找`;
-                else intro += "要在全台灣尋找";
-                
-                if (isHiddenGem) intro += "「Google找不到的隱藏版美食」，這正是我的拿手好戲！";
-                else if (selectedFoodType) intro += `完美的「${selectedFoodType}」，這正是我的拿手好戲！`;
-                else intro += "令人驚豔的高品質美味，這正是我的拿手好戲！";
-                
-                intro += " 經過一番精挑細選，我為您找出了以下幾間符合條件的餐廳，希望能為您增添光彩。";
-                return intro;
-            };
 
             return (
                 <div className="relative min-h-screen bg-slate-900 selection:bg-orange-500 selection:text-white pb-12">
@@ -193,14 +160,8 @@
                         {!hasSearched ? (
                             <div className="animate-fade-in">
                                 <div className="mb-8 text-center">
-                                    <h2 className="text-gray-400 font-medium tracking-widest text-sm mb-2">EatExplorer AI</h2>
-                                    <h1 className="text-4xl font-extrabold text-white mb-3 drop-shadow-md">EatExplorer</h1>
-                                    <p className="text-sm text-gray-300 font-medium">探索巷弄隱藏美味，享受極致台灣饗宴</p>
-                                    
-                                    <div className="mt-4 inline-flex items-center gap-1.5 bg-orange-500/20 text-orange-400 px-3 py-1 rounded-full text-xs font-bold border border-orange-500/30">
-                                        <MapPin size={12} />
-                                        <span>GPS 定位與資料庫已同步</span>
-                                    </div>
+                                    <h1 className="text-4xl font-extrabold text-white mb-3 drop-shadow-md tracking-wide">娜娜的美食大冒險</h1>
+                                    <p className="text-sm text-gray-300 font-medium tracking-widest">探索隱藏美味，建立你的專屬圖鑑</p>
                                 </div>
 
                                 <div className="glass-panel rounded-3xl p-6 shadow-2xl space-y-5">
@@ -210,27 +171,26 @@
                                                 <MapPin size={14} className="text-red-400" /> 縣市
                                             </label>
                                             <select 
-                                                className="w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 appearance-none"
+                                                className="w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 appearance-none disabled:opacity-50"
                                                 value={selectedCity}
                                                 onChange={(e) => {setSelectedCity(e.target.value); setSelectedDistrict('');}}
+                                                disabled={isHiddenGem}
                                             >
-                                                <option value="">全部 (不限縣市)</option>
-                                                {/* 動態渲染縣市 */}
+                                                <option value="">全部</option>
                                                 {availableCities.map(city => <option key={city} value={city}>{city}</option>)}
                                             </select>
                                         </div>
                                         <div>
                                             <label className="flex items-center gap-1.5 text-xs text-gray-400 font-bold mb-2">
-                                                <MapIcon size={14} className="text-blue-400" /> 行政區
+                                                <MapPin size={14} className="text-blue-400" /> 行政區
                                             </label>
                                             <select 
-                                                className="w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 appearance-none disabled:opacity-50"
+                                                className="w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 appearance-none disabled:opacity-50"
                                                 value={selectedDistrict}
                                                 onChange={(e) => setSelectedDistrict(e.target.value)}
-                                                disabled={!selectedCity}
+                                                disabled={!selectedCity || isHiddenGem}
                                             >
                                                 <option value="">全區</option>
-                                                {/* 動態渲染行政區 */}
                                                 {availableDistricts.map(dist => <option key={dist} value={dist}>{dist}</option>)}
                                             </select>
                                         </div>
@@ -241,12 +201,12 @@
                                             <span className="text-yellow-400">🤤</span> 想吃什麼？
                                         </label>
                                         <select 
-                                            className="w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 appearance-none"
+                                            className="w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 appearance-none disabled:opacity-50"
                                             value={selectedFoodType}
                                             onChange={(e) => setSelectedFoodType(e.target.value)}
+                                            disabled={isHiddenGem}
                                         >
-                                            <option value="">全部 (什麼都想吃)</option>
-                                            {/* 動態渲染食物類型 */}
+                                            <option value="">全部</option>
                                             {availableFoodTypes.map(type => <option key={type} value={type}>{type}</option>)}
                                         </select>
                                     </div>
@@ -256,9 +216,10 @@
                                             <DollarSign size={14} className="text-green-400" /> 預算範圍
                                         </label>
                                         <select 
-                                            className="w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 appearance-none"
+                                            className="w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-orange-500 appearance-none disabled:opacity-50"
                                             value={selectedPrice}
                                             onChange={(e) => setSelectedPrice(e.target.value)}
+                                            disabled={isHiddenGem}
                                         >
                                             <option value="">全部</option>
                                             {PRICE_LEVELS.map(level => <option key={level.value} value={level.value}>{level.label}</option>)}
@@ -275,6 +236,7 @@
                                         <button 
                                             onClick={() => setIsOpenNow(!isOpenNow)}
                                             className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold border transition-colors ${isOpenNow ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-slate-800/60 border-slate-600 text-gray-300'}`}
+                                            disabled={isHiddenGem}
                                         >
                                             <Clock size={16} /> 營業中
                                         </button>
@@ -283,11 +245,11 @@
 
                                 <div className="mt-8">
                                     <button 
-                                        onClick={handleSearch}
+                                        onClick={() => { setHasSearched(true); window.scrollTo(0,0); }}
                                         disabled={isLoading}
-                                        className="w-full bg-gradient-to-r from-orange-400 to-orange-600 text-white font-extrabold text-lg py-4 rounded-2xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 transition-all disabled:opacity-70 flex justify-center items-center gap-2"
+                                        className="w-full bg-gradient-to-r from-orange-400 to-orange-600 text-white font-extrabold text-xl py-4 rounded-2xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 transition-all disabled:opacity-70 flex justify-center items-center gap-2 tracking-widest"
                                     >
-                                        {isLoading ? <span className="animate-pulse">讀取圖鑑中...</span> : '開始探索美食'}
+                                        {isLoading ? <span className="animate-pulse">準備中...</span> : '出 發'}
                                     </button>
                                 </div>
                             </div>
@@ -295,91 +257,97 @@
                             <div className="animate-fade-in pb-10">
                                 <div className="flex justify-center mb-8">
                                     <button 
-                                        onClick={resetSearch}
+                                        onClick={() => setHasSearched(false)}
                                         className="glass-panel px-5 py-2 rounded-full text-sm font-bold text-gray-300 hover:text-white flex items-center gap-2 transition-colors"
                                     >
-                                        <RefreshCcw size={16} /> 重新搜尋
+                                        <RefreshCcw size={16} /> 重新選擇
                                     </button>
-                                </div>
-
-                                <h2 className="text-gray-400 font-medium tracking-widest text-xs mb-6 text-center">EatExplorer AI</h2>
-
-                                <div className="glass-panel rounded-2xl p-6 mb-8 border border-white/10 shadow-xl">
-                                    <h3 className="text-xl font-extrabold text-orange-300 flex items-center gap-2 mb-4">
-                                        <Sparkles size={22} className="text-orange-400" /> AI 尋味報告
-                                    </h3>
-                                    <p className="text-sm leading-relaxed text-gray-300 mb-4">
-                                        {generateAIIntro()}
-                                    </p>
-                                    <p className="text-sm font-bold text-white border-b border-gray-700 pb-2">
-                                        以下是為您推薦的 {filteredRestaurants.length} 間餐廳：
-                                    </p>
                                 </div>
 
                                 <div className="space-y-6">
                                     {filteredRestaurants.length === 0 ? (
                                         <div className="text-center py-10 glass-panel rounded-2xl">
-                                            <Compass size={40} className="mx-auto text-gray-500 mb-3" />
-                                            <p className="text-gray-400">找不到符合條件的餐廳<br/>換個條件試試看吧！</p>
+                                            <p className="text-gray-400">目前沒有符合條件的餐廳喔！</p>
                                         </div>
                                     ) : (
                                         filteredRestaurants.map((restaurant, idx) => (
                                             <div key={idx} className="glass-panel rounded-2xl overflow-hidden relative border-l-4 border-l-orange-500">
                                                 <div className="p-5">
-                                                    <h3 className="text-xl font-extrabold text-white mb-4 pr-16">{restaurant.name}</h3>
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <h3 className="text-xl font-extrabold text-white pr-4">{restaurant.name}</h3>
+                                                        {restaurant.isHidden && (
+                                                            <div className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap shrink-0">
+                                                                隱藏版
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="space-y-3 mb-5">
+                                                        {!restaurant.isHidden && (
+                                                            <>
+                                                                <div className="flex items-center gap-2 text-sm text-gray-300">
+                                                                    <Star size={16} className="text-orange-400 fill-orange-400" />
+                                                                    <span className="font-bold text-white">{restaurant.rating > 0 ? restaurant.rating : '尚未評分'}</span>
+                                                                    <span className="text-gray-500 px-1">•</span>
+                                                                    <span>{restaurant.city} {restaurant.district}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-sm text-gray-300">
+                                                                    <DollarSign size={16} className="text-green-400" />
+                                                                    <span>{renderPrice(restaurant.priceLevel)}</span>
+                                                                    <span className="text-gray-500 px-1">•</span>
+                                                                    <span>{restaurant.foodType}</span>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+
+                                                    {/* AI 三段式深度點評區塊 */}
+                                                    <div className="space-y-4 border-t border-slate-700/50 pt-4">
+                                                        {typeof restaurant.aiData === 'object' ? (
+                                                            <>
+                                                                <div className="flex items-start gap-2">
+                                                                    <div className="bg-orange-500/20 p-1.5 rounded-full mt-0.5"><Star size={14} className="text-orange-400" /></div>
+                                                                    <div><span className="text-sm font-bold text-white block mb-0.5">必點招牌</span><span className="text-sm text-gray-400">{restaurant.aiData.signature}</span></div>
+                                                                </div>
+                                                                <div className="flex items-start gap-2">
+                                                                    <div className="bg-blue-500/20 p-1.5 rounded-full mt-0.5"><MessageSquare size={14} className="text-blue-400" /></div>
+                                                                    <div><span className="text-sm font-bold text-white block mb-0.5">評論摘要</span><span className="text-sm text-gray-400">{restaurant.aiData.review}</span></div>
+                                                                </div>
+                                                                <div className="flex items-start gap-2">
+                                                                    <div className="bg-yellow-500/20 p-1.5 rounded-full mt-0.5"><Lightbulb size={14} className="text-yellow-400" /></div>
+                                                                    <div><span className="text-sm font-bold text-white block mb-0.5">推薦原因</span><span className="text-sm text-gray-400">{restaurant.aiData.reason}</span></div>
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <p className="text-sm text-gray-400 italic">" {restaurant.aiData} "</p>
+                                                        )}
+                                                    </div>
                                                     
-                                                    {(restaurant.rating === 0 || !restaurant.mapUrl) && (
-                                                        <div className="absolute top-5 right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-sm tracking-wider">
-                                                            GOOGLE 無資料
+                                                    {/* 個人筆記與吃過標記區塊 */}
+                                                    {(restaurant.personalNote || restaurant.isVisited) && (
+                                                        <div className="mt-4 bg-slate-800/60 p-3 rounded-xl border border-slate-700/50">
+                                                            {restaurant.isVisited && (
+                                                                <div className="flex items-center gap-1.5 text-xs font-bold text-green-400 mb-2">
+                                                                    <CheckCircle size={14} /> 娜娜已征服 (吃過啦！)
+                                                                </div>
+                                                            )}
+                                                            {restaurant.personalNote && (
+                                                                <div className="flex items-start gap-1.5 text-xs text-gray-300">
+                                                                    <Edit3 size={14} className="text-gray-500 mt-0.5 shrink-0" />
+                                                                    <span>{restaurant.personalNote}</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
+                                                </div>
 
-                                                    <div className="space-y-3">
-                                                        <div className="flex items-start gap-3">
-                                                            <div className="bg-orange-500/20 p-1.5 rounded-lg mt-0.5">
-                                                                <Star size={16} className="text-orange-400 fill-orange-400" />
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-gray-400 font-bold mb-0.5">Google 評分</p>
-                                                                <p className="text-sm text-gray-200">{restaurant.rating > 0 ? `${restaurant.rating} 顆星` : '在地人私藏 (無評分)'}</p>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex items-start gap-3">
-                                                            <div className="bg-slate-700 p-1.5 rounded-lg mt-0.5">
-                                                                <Clock size={16} className="text-gray-300" />
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-gray-400 font-bold mb-0.5">營業時間</p>
-                                                                <p className="text-sm text-gray-200">今日營業中 (請以店家為準)</p>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex items-start gap-3">
-                                                            <div className="bg-green-900/40 p-1.5 rounded-lg mt-0.5">
-                                                                <DollarSign size={16} className="text-green-400" />
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-gray-400 font-bold mb-0.5">價位與類型</p>
-                                                                <p className="text-sm text-gray-200">{renderPrice(restaurant.priceLevel)} · {restaurant.foodType}</p>
-                                                            </div>
-                                                        </div>
+                                                {!restaurant.isHidden && (
+                                                    <div className="bg-slate-800/80 px-5 py-3 border-t border-slate-700/50">
+                                                        <a href={restaurant.mapUrl} target="_blank" className="w-full flex justify-center items-center gap-2 text-sm font-bold text-orange-400 hover:text-orange-300 transition-colors">
+                                                            在 Google 地圖開啟
+                                                        </a>
                                                     </div>
-                                                </div>
-
-                                                <div className="bg-slate-800/80 px-5 py-4 border-t border-slate-700/50">
-                                                    <p className="text-xs text-gray-400 leading-relaxed italic mb-3">
-                                                        " {restaurant.aiSummary} "
-                                                    </p>
-                                                    <a 
-                                                        href={restaurant.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name + ' ' + restaurant.address)}`} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="w-full inline-block text-center bg-white/10 hover:bg-white/20 text-white font-bold py-2.5 rounded-xl text-sm transition-colors border border-white/10"
-                                                    >
-                                                        查看詳細地圖
-                                                    </a>
-                                                </div>
+                                                )}
                                             </div>
                                         ))
                                     )}
