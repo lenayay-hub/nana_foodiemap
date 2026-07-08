@@ -4,9 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>娜娜的美食大冒險</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React 18 與 ReactDOM 18 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel 7 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body { 
@@ -34,9 +37,9 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
-        // SVG 圖示
+        // --- SVG Icons ---
         const MapPin = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 0-16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
         const Star = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>;
         const Clock = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
@@ -56,7 +59,7 @@
             { value: 4, label: '高級饗宴 ($$$$)' }
         ];
 
-        // 🌟 1. 營業時間狀態判斷 (燈號用)
+        // 🌟 營業時間判斷
         const checkIsOpenNow = (hoursJson) => {
             if (!hoursJson) return null; 
             try {
@@ -80,18 +83,15 @@
             } catch (e) { return null; }
         };
 
-        // 🌟 2. 擷取「今日營業時間」文字 (文字顯示用)
         const getTodayHoursText = (hoursJson) => {
             if (!hoursJson) return '未提供營業時間';
             try {
                 const hours = JSON.parse(hoursJson);
                 if (hours.weekdayDescriptions && hours.weekdayDescriptions.length > 0) {
                     const twTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Taipei"}));
-                    let dayIndex = twTime.getDay() - 1; // Google 星期一是 0
-                    if (dayIndex === -1) dayIndex = 6;  // 星期天是 6
-                    
+                    let dayIndex = twTime.getDay() - 1; 
+                    if (dayIndex === -1) dayIndex = 6;  
                     const desc = hours.weekdayDescriptions[dayIndex];
-                    // 切割掉「星期幾:」的前綴，只保留時間
                     const splitIndex = desc.indexOf(':') !== -1 ? desc.indexOf(':') : desc.indexOf('：');
                     return splitIndex !== -1 ? desc.substring(splitIndex + 1).trim() : desc;
                 }
@@ -99,7 +99,7 @@
             return '依店家公告為主';
         };
 
-        // --- 餐廳卡片組件 ---
+        // --- 獨立卡片組件 ---
         const RestaurantCard = ({ restaurant, renderPrice }) => {
             const [isEditing, setIsEditing] = useState(false);
             const [noteContent, setNoteContent] = useState(restaurant.personalNote || '');
@@ -109,13 +109,12 @@
                 setIsSaving(true);
                 try {
                     await fetch(GAS_API_URL, {
-                        method: 'POST',
-                        body: JSON.stringify({ action: 'updateNote', rowId: restaurant.id, note: noteContent })
+                        method: 'POST', body: JSON.stringify({ action: 'updateNote', rowId: restaurant.id, note: noteContent })
                     });
                     restaurant.personalNote = noteContent;
                     setIsEditing(false);
                 } catch (error) {
-                    alert('儲存失敗，請確認網路連線或稍後再試！');
+                    alert('儲存失敗，請確認網路連線！');
                 } finally {
                     setIsSaving(false);
                 }
@@ -124,20 +123,21 @@
             return (
                 <div className="glass-panel rounded-2xl overflow-hidden relative border-l-4 border-l-orange-500 animate-fade-in group shadow-2xl mb-8">
                     
-                    {/* 📸 圖片強制顯示區塊 */}
+                    {/* 📸 AI 裁切 / 雲端照片顯示 */}
                     {restaurant.photoUrl && (
-                        <div className="w-full h-40 overflow-hidden relative bg-slate-800">
+                        <div className="w-full h-44 overflow-hidden relative bg-slate-800">
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent z-10"></div>
                             <img 
                                 src={restaurant.photoUrl} 
+                                referrerPolicy="no-referrer" /* 魔法屬性：解鎖 Google Drive 圖片顯示 */
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
                                 alt="餐廳照片"
-                                onError={(e) => { e.target.style.display = 'none'; }} // 如果圖片失效自動隱藏，防止破圖
+                                onError={(e) => { e.target.style.display = 'none'; }} 
                             />
                         </div>
                     )}
                     
-                    <div className={`p-5 ${restaurant.photoUrl ? '-mt-6 relative z-20' : ''}`}>
+                    <div className={`p-5 ${restaurant.photoUrl ? '-mt-8 relative z-20' : ''}`}>
                         <div className="flex justify-between items-start mb-6">
                             <h3 className="text-2xl font-extrabold text-white pr-4 drop-shadow-md">{restaurant.name}</h3>
                             <div className="flex flex-col items-end gap-1 shrink-0">
@@ -155,27 +155,25 @@
                             </div>
                         </div>
 
-                        {/* 🌟 資訊排版：完全對齊你的截圖設計 */}
                         <div className="space-y-4 mb-6">
                             {!restaurant.isHidden && (
                                 <React.Fragment>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
-                                        <Star size={18} className="text-yellow-400 fill-yellow-400" />
+                                        <Star size={18} className="text-yellow-400 fill-yellow-400 shrink-0" />
                                         <span><strong className="text-white tracking-wide">Google 評分：</strong>{restaurant.rating > 0 ? `${restaurant.rating} 顆星` : '尚未評分'}</span>
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
-                                        <Clock size={18} className="text-gray-400" />
+                                        <Clock size={18} className="text-gray-400 shrink-0" />
                                         <span><strong className="text-white tracking-wide">營業時間：</strong>今日 {restaurant.todayHoursText}</span>
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
-                                        <DollarSign size={18} className="text-orange-300" />
+                                        <DollarSign size={18} className="text-orange-300 shrink-0" />
                                         <span><strong className="text-white tracking-wide">價位/類型：</strong>{renderPrice(restaurant.priceLevel)} ({restaurant.city}{restaurant.district} · {restaurant.foodType})</span>
                                     </div>
                                 </React.Fragment>
                             )}
                         </div>
 
-                        {/* AI 三段式深度點評區塊 */}
                         <div className="space-y-5 border-t border-slate-700/50 pt-5">
                             {restaurant.aiData && typeof restaurant.aiData === 'object' ? (
                                 <React.Fragment>
@@ -212,16 +210,12 @@
                             )}
                         </div>
                         
-                        {/* 網頁前端直接儲存筆記區塊 */}
                         <div className="mt-6 pt-5 border-t border-slate-700/50">
                             {isEditing ? (
                                 <div className="bg-slate-800/80 p-3 rounded-xl border border-orange-500/50">
                                     <textarea 
                                         className="w-full bg-transparent text-sm text-gray-200 outline-none resize-none placeholder-gray-500 min-h-[60px]"
-                                        placeholder="寫下你的評語或紀錄..."
-                                        value={noteContent}
-                                        onChange={(e) => setNoteContent(e.target.value)}
-                                        autoFocus
+                                        placeholder="寫下你的評語或紀錄..." value={noteContent} onChange={(e) => setNoteContent(e.target.value)} autoFocus
                                     />
                                     <div className="flex justify-end gap-2 mt-2">
                                         <button onClick={() => setIsEditing(false)} className="text-xs text-gray-400 px-3 py-1 hover:text-white" disabled={isSaving}>取消</button>
@@ -231,15 +225,10 @@
                                     </div>
                                 </div>
                             ) : (
-                                <div 
-                                    className="bg-slate-800/40 hover:bg-slate-800/80 p-3 rounded-xl border border-dashed border-slate-600/50 cursor-text transition-colors group flex items-start justify-between gap-2"
-                                    onClick={() => setIsEditing(true)}
-                                >
+                                <div className="bg-slate-800/40 hover:bg-slate-800/80 p-3 rounded-xl border border-dashed border-slate-600/50 cursor-text transition-colors group flex items-start justify-between gap-2" onClick={() => setIsEditing(true)}>
                                     <div className="flex items-start gap-2 text-sm text-gray-300">
                                         <Edit3 size={14} className="text-gray-500 mt-0.5 shrink-0" />
-                                        <span className={restaurant.personalNote ? '' : 'text-gray-500 italic'}>
-                                            {restaurant.personalNote || '點此新增個人筆記...'}
-                                        </span>
+                                        <span className={restaurant.personalNote ? '' : 'text-gray-500 italic'}>{restaurant.personalNote || '點此新增個人筆記...'}</span>
                                     </div>
                                     <span className="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pt-0.5">編輯</span>
                                 </div>
@@ -258,6 +247,7 @@
             );
         };
 
+        // --- 主程式 App ---
         function App() {
             const [restaurants, setRestaurants] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
@@ -282,18 +272,13 @@
                             const formattedData = data.map(item => {
                                 let aiSummaryData = null;
                                 const rawAiText = item['AI總結'] || '';
-                                
                                 if (rawAiText.startsWith('{') && rawAiText.endsWith('}')) {
                                     try { aiSummaryData = JSON.parse(rawAiText); } catch(e) {}
                                 }
-
                                 const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
                                 const rawPrice = parseInt(item['價位']);
-                                const safePriceLevel = isNaN(rawPrice) ? 2 : rawPrice;
-                                
-                                // 🌟 從 GAS 取出資料
-                                const rawHoursJson = item['營業時間'] || item['營業狀態'] || '';
-                                const photoUrl = item['照片網址'] || item['照片'] || item['照片連結'] || '';
+                                const rawHoursJson = item['營業時間'] || '';
+                                const photoUrl = item['照片網址'] || '';
 
                                 return {
                                     id: item.id, 
@@ -301,26 +286,23 @@
                                     city: item['縣市'] || '',
                                     district: item['區域'] || '',
                                     foodType: item['類型'] || '美食',
-                                    priceLevel: safePriceLevel,
+                                    priceLevel: isNaN(rawPrice) ? 2 : rawPrice,
                                     rating: parseFloat(item['Google評分']) || 0,
-                                    address: item['完整地址'] || item['地址'] || '',
                                     mapUrl: item['地圖連結'] || '',
-                                    photoUrl: photoUrl, // 📸 圖片網址防呆讀取
+                                    photoUrl: photoUrl, 
                                     isHidden: isHidden,
                                     aiData: aiSummaryData || rawAiText, 
                                     personalNote: item['個人註解'] || '', 
                                     isOpenNow: checkIsOpenNow(rawHoursJson),
-                                    todayHoursText: getTodayHoursText(rawHoursJson) // 🕒 取出今日營業時間文字
+                                    todayHoursText: getTodayHoursText(rawHoursJson) 
                                 };
                             }).filter(item => item.name !== '未命名餐廳' && item.name !== '');
-
                             setRestaurants(formattedData.reverse());
                         } else {
                             throw new Error(data.error || "API 資料格式異常");
                         }
                     } catch (err) {
-                        console.error("讀取失敗:", err);
-                        setFetchError(err.message || "無法取得餐廳列表，請確認 Google Sheet 是否已正確發佈。");
+                        setFetchError(err.message || "無法取得餐廳列表");
                     } finally {
                         setIsLoading(false);
                     }
@@ -328,21 +310,9 @@
                 fetchRestaurants();
             }, []);
 
-            const availableCities = useMemo(() => {
-                const cities = restaurants.map(r => r.city).filter(c => c && c !== '隱藏版' && c !== '未知');
-                return [...new Set(cities)].sort();
-            }, [restaurants]);
-
-            const availableDistricts = useMemo(() => {
-                if (!selectedCity) return [];
-                const districts = restaurants.filter(r => r.city === selectedCity).map(r => r.district).filter(d => d && d !== '未知區域');
-                return [...new Set(districts)].sort();
-            }, [restaurants, selectedCity]);
-
-            const availableFoodTypes = useMemo(() => {
-                const types = restaurants.map(r => r.foodType).filter(t => t && t !== '美食');
-                return [...new Set(types)].sort();
-            }, [restaurants]);
+            const availableCities = useMemo(() => [...new Set(restaurants.map(r => r.city).filter(c => c && c !== '隱藏版' && c !== '未知'))].sort(), [restaurants]);
+            const availableDistricts = useMemo(() => !selectedCity ? [] : [...new Set(restaurants.filter(r => r.city === selectedCity).map(r => r.district).filter(d => d && d !== '未知區域'))].sort(), [restaurants, selectedCity]);
+            const availableFoodTypes = useMemo(() => [...new Set(restaurants.map(r => r.foodType).filter(t => t && t !== '美食'))].sort(), [restaurants]);
 
             const filteredRestaurants = useMemo(() => {
                 return restaurants.filter(restaurant => {
@@ -363,10 +333,10 @@
             const renderPrice = (level) => {
                 const num = parseInt(level);
                 if (isNaN(num) || num < 1) return 'NT$ 不明';
-                if (num === 1) return '百元平價小吃 ($)';
-                if (num === 2) return '人均消費約 NT$300-800 ($$)';
-                if (num === 3) return '人均消費約 NT$800-1500 ($$$)';
-                if (num >= 4) return '人均消費 NT$1500+ ($$$$)';
+                if (num === 1) return '平價小吃 ($)';
+                if (num === 2) return 'NT$300-800 ($$)';
+                if (num === 3) return 'NT$800-1500 ($$$)';
+                if (num >= 4) return 'NT$1500+ ($$$$)';
                 return '$';
             };
 
@@ -386,11 +356,7 @@
                                 </div>
 
                                 <div className="glass-panel rounded-3xl p-6 shadow-2xl space-y-5">
-                                    {fetchError && (
-                                        <div className="bg-red-500/20 border border-red-500/40 rounded-xl p-3 text-xs text-red-300 break-words">
-                                            ⚠️ {fetchError}
-                                        </div>
-                                    )}
+                                    {fetchError && <div className="bg-red-500/20 border border-red-500/40 rounded-xl p-3 text-xs text-red-300 break-words">⚠️ {fetchError}</div>}
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
@@ -435,10 +401,7 @@
                                     <button onClick={() => { setHasSearched(true); window.scrollTo(0,0); }} disabled={isLoading} className="w-full bg-gradient-to-r from-orange-400 to-orange-600 text-white font-extrabold text-xl py-4 rounded-2xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 transition-all disabled:opacity-75 flex justify-center items-center gap-2 tracking-widest">
                                         {isLoading ? (
                                             <span className="flex items-center gap-2">
-                                                <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                </svg>
+                                                <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                                 載入美味選單中...
                                             </span>
                                         ) : '出 發'}
