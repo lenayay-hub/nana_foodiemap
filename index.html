@@ -51,13 +51,6 @@
 
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyKXiPyB0px2WYHW2l2CxeCID-yj2ixog9FezvrPYuzfgX9MSAtRcP-hqj3yQTTBbUi/exec';
 
-        const PRICE_LEVELS = [
-            { value: 1, label: '平價小吃 ($)' },
-            { value: 2, label: '中等價位 ($$)' },
-            { value: 3, label: '中高價位 ($$$)' },
-            { value: 4, label: '高級饗宴 ($$$$)' }
-        ];
-
         // 🌟 營業時間判斷
         const checkIsOpenNow = (hoursJson) => {
             if (!hoursJson) return null; 
@@ -134,18 +127,23 @@
             return (
                 <div className="glass-panel rounded-2xl overflow-hidden relative border-l-4 border-l-orange-500 animate-fade-in group shadow-2xl mb-8">
                     
-                    {/* 📸 手機版完美支援的橫向滑動照片組 (Carousel) */}
+                    {/* 📸 圖片完美呈現區 (修正過後) */}
                     {restaurant.photoUrls && restaurant.photoUrls.length > 0 && (
                         <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar p-4 gap-3 bg-slate-800/40">
                             {restaurant.photoUrls.map((url, index) => (
-                                <div key={index} className="snap-center shrink-0 w-[85%] h-52 rounded-xl overflow-hidden relative shadow-lg border border-slate-700/50">
+                                <div key={index} className="snap-center shrink-0 w-[85%] h-52 rounded-xl overflow-hidden relative shadow-lg border border-slate-700/50 bg-slate-800/80 flex items-center justify-center">
+                                    {/* 加入 opacity transition，圖片載入完成才顯示，避免破圖 */}
                                     <img 
                                         src={url} 
                                         referrerPolicy="no-referrer"
-                                        className="w-full h-full object-cover" 
-                                        alt={`照片 ${index + 1}`}
-                                        onError={(e) => { e.target.style.display = 'none'; }} 
+                                        className="w-full h-full object-cover opacity-0 transition-opacity duration-500" 
+                                        alt={`${restaurant.name} 照片 ${index + 1}`}
+                                        onLoad={(e) => { e.target.classList.remove('opacity-0'); e.target.classList.add('opacity-100'); }}
+                                        onError={(e) => { e.target.parentElement.style.display = 'none'; }} 
                                     />
+                                    <span className="absolute text-slate-500 text-xs -z-10 flex items-center gap-2">
+                                        <RefreshCcw className="animate-spin" size={14} /> 載入照片中...
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -258,13 +256,17 @@
                                     try { aiSummaryData = JSON.parse(rawAiText); } catch(e) {}
                                 }
                                 
-                                // 解析照片陣列
+                                // 🌟 照片解析邏輯強化：防呆與錯誤攔截
                                 let parsedPhotoUrls = [];
                                 const rawPhotoUrls = item['照片網址'] || '';
-                                if (rawPhotoUrls.startsWith('[')) {
-                                    try { parsedPhotoUrls = JSON.parse(rawPhotoUrls); } catch(e) {}
-                                } else if (rawPhotoUrls.startsWith('http')) {
-                                    parsedPhotoUrls = [rawPhotoUrls]; // 相容舊資料
+                                if (rawPhotoUrls.trim().startsWith('[')) {
+                                    try { 
+                                        parsedPhotoUrls = JSON.parse(rawPhotoUrls); 
+                                    } catch(e) {
+                                        console.warn(`照片解析失敗 (ID: ${item.id}):`, rawPhotoUrls);
+                                    }
+                                } else if (rawPhotoUrls && rawPhotoUrls.startsWith('http')) {
+                                    parsedPhotoUrls = [rawPhotoUrls]; // 相容不是陣列的單張舊資料
                                 }
 
                                 const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
