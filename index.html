@@ -4,9 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>娜娜的美食大冒險</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React 18 與 ReactDOM 18 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel 7 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body { 
@@ -14,7 +17,7 @@
             font-family: system-ui, -apple-system, sans-serif; 
             -webkit-tap-highlight-color: transparent;
         }
-        /* 隱藏照片橫向滑動軸的卷軸，保持美觀 */
+        /* 隱藏照片橫向滑動區的卷軸 */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
@@ -35,8 +38,9 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
+        // --- SVG Icons ---
         const MapPin = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 0-16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
         const Star = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>;
         const Clock = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
@@ -91,7 +95,7 @@
                     return splitIndex !== -1 ? desc.substring(splitIndex + 1).trim() : desc;
                 }
             } catch(e) {}
-            return '依店家公告為主';
+            return '依現場公告為主';
         };
 
         // --- 獨立卡片組件 ---
@@ -115,9 +119,9 @@
                 }
             };
 
-            // 🌟 智慧價位顯示：超乾淨顯示
+            // 🌟 智慧價位顯示
             let priceDisplay = 'NT$ 不明';
-            if (restaurant.aiData && restaurant.aiData.exactPrice && restaurant.aiData.exactPrice !== "NT$ 不明") {
+            if (restaurant.aiData && restaurant.aiData.exactPrice && restaurant.aiData.exactPrice !== "依現場為主") {
                 priceDisplay = restaurant.aiData.exactPrice;
             } else {
                 const num = restaurant.priceLevel;
@@ -130,11 +134,11 @@
             return (
                 <div className="glass-panel rounded-2xl overflow-hidden relative border-l-4 border-l-orange-500 animate-fade-in group shadow-2xl mb-8">
                     
-                    {/* 📸 橫向滑動照片組 (Carousel) */}
+                    {/* 📸 手機版完美支援的橫向滑動照片組 (Carousel) */}
                     {restaurant.photoUrls && restaurant.photoUrls.length > 0 && (
-                        <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar pb-3 pt-4 px-4 gap-3 bg-slate-800/40">
+                        <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar p-4 gap-3 bg-slate-800/40">
                             {restaurant.photoUrls.map((url, index) => (
-                                <div key={index} className="snap-center shrink-0 w-4/5 md:w-3/4 h-48 rounded-xl overflow-hidden relative shadow-md border border-slate-700">
+                                <div key={index} className="snap-center shrink-0 w-[85%] h-52 rounded-xl overflow-hidden relative shadow-lg border border-slate-700/50">
                                     <img 
                                         src={url} 
                                         referrerPolicy="no-referrer"
@@ -166,8 +170,8 @@
                             </div>
                         </div>
 
-                        {/* 超精簡資訊區 */}
-                        <div className="space-y-4 mb-4">
+                        {/* 極簡資訊區 */}
+                        <div className="space-y-4 mb-2">
                             {!restaurant.isHidden && (
                                 <React.Fragment>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
@@ -180,14 +184,14 @@
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <DollarSign size={18} className="text-orange-300 shrink-0" />
-                                        <span><strong className="text-white tracking-wide">價位：</strong>{priceDisplay}</span>
+                                        <span><strong className="text-white tracking-wide">預估價位：</strong>{priceDisplay}</span>
                                     </div>
                                 </React.Fragment>
                             )}
                         </div>
                         
-                        {/* 📝 個人筆記區塊 (獨立拉出) */}
-                        <div className="mt-4 pt-4 border-t border-slate-700/50">
+                        {/* 📝 個人筆記區塊 */}
+                        <div className="mt-5 pt-5 border-t border-slate-700/50">
                             {isEditing ? (
                                 <div className="bg-slate-800/80 p-3 rounded-xl border border-orange-500/50">
                                     <textarea 
@@ -260,7 +264,7 @@
                                 if (rawPhotoUrls.startsWith('[')) {
                                     try { parsedPhotoUrls = JSON.parse(rawPhotoUrls); } catch(e) {}
                                 } else if (rawPhotoUrls.startsWith('http')) {
-                                    parsedPhotoUrls = [rawPhotoUrls]; // 相容舊版單張圖片
+                                    parsedPhotoUrls = [rawPhotoUrls]; // 相容舊資料
                                 }
 
                                 const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
@@ -275,7 +279,7 @@
                                     priceLevel: parseInt(item['價位']) || 2,
                                     rating: parseFloat(item['Google評分']) || 0,
                                     mapUrl: item['地圖連結'] || '',
-                                    photoUrls: parsedPhotoUrls, // 傳入陣列
+                                    photoUrls: parsedPhotoUrls, 
                                     isHidden: isHidden,
                                     aiData: aiSummaryData || rawAiText, 
                                     personalNote: item['個人註解'] || '', 
