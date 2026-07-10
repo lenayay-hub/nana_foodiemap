@@ -131,12 +131,15 @@
                                 <div key={index} className="snap-center shrink-0 w-[85%] h-52 rounded-xl overflow-hidden relative shadow-lg border border-slate-700/50">
                                     <img 
                                         src={url} 
-                                        referrerPolicy="no-referrer" /* 👈 🔑 就是這行！告訴 Google 不要阻擋外部網頁讀取！ */
+                                        referrerPolicy="no-referrer" /* 👈 🔑 告訴 Google 不要阻擋外部網頁讀取！ */
                                         className="w-full h-full object-cover" 
                                         alt={`照片 ${index + 1}`}
                                         onError={(e) => { 
-                                            // 防破圖：如果還是被擋住，自動隱藏單張，不破壞畫面
+                                            // 🔥 加了一行 console.error 幫助你檢查是哪張網址壞掉
+                                            console.error(`餐廳 [${restaurant.name}] 的第 ${index + 1} 張圖片載入失敗，網址為:`, url);
+                                            // 防破圖：隱藏單張，不破壞畫面
                                             e.target.style.display = 'none'; 
+                                            e.target.parentElement.style.display = 'none'; // 連外框一起隱藏
                                         }} 
                                     />
                                 </div>
@@ -293,15 +296,30 @@
                                     try { aiSummaryData = JSON.parse(rawAiText); } catch(e) {}
                                 }
                                 
-                                // 🌟 終極容錯解析器：無論試算表存什麼格式，全部轉成乾淨陣列
+                                // 🔥🔥🔥 這裡做了大幅度的改進 🔥🔥🔥
                                 let parsedPhotoUrls = [];
                                 const rawPhotoUrls = (item['照片網址'] || '').trim();
+                                
                                 if (rawPhotoUrls.startsWith('[')) {
                                     try { parsedPhotoUrls = JSON.parse(rawPhotoUrls); } catch(e) {}
-                                } else if (rawPhotoUrls.startsWith('http')) {
-                                    // 容錯：如果是被引號包住或用逗號分開的，做切分
-                                    parsedPhotoUrls = rawPhotoUrls.split(',').map(url => url.replace(/["']/g, '').trim());
+                                } else if (rawPhotoUrls.length > 0) {
+                                    // 支援用「逗號」、「空白」或「換行」來分隔多張照片網址
+                                    parsedPhotoUrls = rawPhotoUrls
+                                        .split(/(?:,|\n|\s)+/)
+                                        .map(url => url.replace(/["']/g, '').trim())
+                                        .filter(url => url.startsWith('http'));
                                 }
+
+                                // 關鍵魔法：自動把 Google Drive 的分享連結，轉成可以在網頁上顯示的直連圖片！
+                                parsedPhotoUrls = parsedPhotoUrls.map(url => {
+                                    if (url.includes('drive.google.com')) {
+                                        const match = url.match(/\/(?:d|file\/d)\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+                                        if (match && match[1]) {
+                                            return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+                                        }
+                                    }
+                                    return url;
+                                });
 
                                 const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
                                 const rawHoursJson = item['營業時間'] || '';
