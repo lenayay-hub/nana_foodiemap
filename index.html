@@ -124,22 +124,20 @@
             return (
                 <div className="glass-panel rounded-2xl overflow-hidden relative border-l-4 border-l-orange-500 animate-fade-in group shadow-2xl mb-8">
                     
-                    {/* 📸 照片顯示區塊 (🔥 終極容錯與免阻擋版) */}
+                    {/* 📸 照片顯示區塊 */}
                     {restaurant.photoUrls && restaurant.photoUrls.length > 0 ? (
                         <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar p-4 gap-3 bg-slate-800/40 border-b border-slate-700/50">
                             {restaurant.photoUrls.map((url, index) => (
                                 <div key={index} className="snap-center shrink-0 w-[85%] h-52 rounded-xl overflow-hidden relative shadow-lg border border-slate-700/50">
                                     <img 
                                         src={url} 
-                                        referrerPolicy="no-referrer" /* 👈 🔑 告訴 Google 不要阻擋外部網頁讀取！ */
+                                        referrerPolicy="no-referrer"
                                         className="w-full h-full object-cover" 
                                         alt={`照片 ${index + 1}`}
                                         onError={(e) => { 
-                                            // 🔥 加了一行 console.error 幫助你檢查是哪張網址壞掉
-                                            console.error(`餐廳 [${restaurant.name}] 的第 ${index + 1} 張圖片載入失敗，網址為:`, url);
-                                            // 防破圖：隱藏單張，不破壞畫面
+                                            console.error(`餐廳 [${restaurant.name}] 圖片載入失敗:`, url);
                                             e.target.style.display = 'none'; 
-                                            e.target.parentElement.style.display = 'none'; // 連外框一起隱藏
+                                            e.target.parentElement.style.display = 'none'; 
                                         }} 
                                     />
                                 </div>
@@ -296,21 +294,19 @@
                                     try { aiSummaryData = JSON.parse(rawAiText); } catch(e) {}
                                 }
                                 
-                                // 🔥🔥🔥 這裡做了大幅度的改進 🔥🔥🔥
+                                // 🔥🔥🔥 終極暴力網址萃取法 🔥🔥🔥
                                 let parsedPhotoUrls = [];
                                 const rawPhotoUrls = (item['照片網址'] || '').trim();
                                 
-                                if (rawPhotoUrls.startsWith('[')) {
-                                    try { parsedPhotoUrls = JSON.parse(rawPhotoUrls); } catch(e) {}
-                                } else if (rawPhotoUrls.length > 0) {
-                                    // 支援用「逗號」、「空白」或「換行」來分隔多張照片網址
-                                    parsedPhotoUrls = rawPhotoUrls
-                                        .split(/(?:,|\n|\s)+/)
-                                        .map(url => url.replace(/["']/g, '').trim())
-                                        .filter(url => url.startsWith('http'));
+                                if (rawPhotoUrls) {
+                                    // 這個正則表達式會無視引號、括號，直接把文字裡所有 http/https 網址完整吸出來
+                                    const urlMatches = rawPhotoUrls.match(/https?:\/\/[^\s"'<>[\]{}]+/g);
+                                    if (urlMatches) {
+                                        parsedPhotoUrls = urlMatches;
+                                    }
                                 }
 
-                                // 關鍵魔法：自動把 Google Drive 的分享連結，轉成可以在網頁上顯示的直連圖片！
+                                // 搭配原本的 Google Drive 雲端硬碟轉換邏輯
                                 parsedPhotoUrls = parsedPhotoUrls.map(url => {
                                     if (url.includes('drive.google.com')) {
                                         const match = url.match(/\/(?:d|file\/d)\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
