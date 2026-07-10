@@ -291,12 +291,21 @@
                                     if (vals.length > 10) rawPhotoUrls = vals[10]; 
                                 }
 
-                                let parsedPhotoUrls = [];
-                                if (typeof rawPhotoUrls === 'string' && rawPhotoUrls.startsWith('[')) {
-                                    try { parsedPhotoUrls = JSON.parse(rawPhotoUrls); } catch(e) {}
-                                } else if (typeof rawPhotoUrls === 'string' && rawPhotoUrls.startsWith('http')) {
-                                    parsedPhotoUrls = [rawPhotoUrls]; 
-                                }
+                                // 🚀 暴力萃取器：不論格式，只要有連結就抓出來
+let parsedPhotoUrls = [];
+const rawPhotoUrls = String(item['照片網址'] || item['照片'] || '');
+
+// 使用正則表達式，直接在文字堆裡把所有符合 https... 的網址抓出來
+const urlRegex = /https:\/\/places\.googleapis\.com\/v1\/places\/[^\s"']+/g;
+const matches = rawPhotoUrls.match(urlRegex);
+
+if (matches) {
+    parsedPhotoUrls = matches;
+} else if (rawPhotoUrls.startsWith('http')) {
+    // 萬一不是上面的格式，但開頭是 http，也視為一個網址
+    parsedPhotoUrls = [rawPhotoUrls];
+}
+
 
                                 const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
                                 const rawHoursJson = item['營業時間'] || '';
