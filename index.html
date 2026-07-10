@@ -16,6 +16,7 @@
         }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
         .glass-panel {
             background: rgba(30, 41, 59, 0.7);
             backdrop-filter: blur(12px);
@@ -33,7 +34,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
         const MapPin = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 0-16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
         const Star = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>;
@@ -48,7 +49,6 @@
 
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyKXiPyB0px2WYHW2l2CxeCID-yj2ixog9FezvrPYuzfgX9MSAtRcP-hqj3yQTTBbUi/exec';
 
-        // 🌟 營業時間判斷
         const checkIsOpenNow = (hoursJson) => {
             if (!hoursJson) return null; 
             try {
@@ -88,7 +88,6 @@
             return '依現場公告為主';
         };
 
-        // --- 獨立卡片組件 ---
         const RestaurantCard = ({ restaurant }) => {
             const [isEditing, setIsEditing] = useState(false);
             const [noteContent, setNoteContent] = useState(restaurant.personalNote || '');
@@ -109,7 +108,6 @@
                 }
             };
 
-            // 🌟 智慧價位顯示
             let priceDisplay = 'NT$ 不明';
             if (restaurant.aiData && restaurant.aiData.exactPrice && restaurant.aiData.exactPrice !== "依現場為主") {
                 priceDisplay = restaurant.aiData.exactPrice;
@@ -124,7 +122,7 @@
             return (
                 <div className="glass-panel rounded-2xl overflow-hidden relative border-l-4 border-l-orange-500 animate-fade-in group shadow-2xl mb-8">
                     
-                    {/* 📸 照片顯示區塊 */}
+                    {/* 📸 橫向滑動照片組：讀取 Google Maps 提貨券 */}
                     {restaurant.photoUrls && restaurant.photoUrls.length > 0 ? (
                         <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar p-4 gap-3 bg-slate-800/40 border-b border-slate-700/50">
                             {restaurant.photoUrls.map((url, index) => (
@@ -134,11 +132,7 @@
                                         referrerPolicy="no-referrer"
                                         className="w-full h-full object-cover" 
                                         alt={`照片 ${index + 1}`}
-                                        onError={(e) => { 
-                                            console.error(`餐廳 [${restaurant.name}] 圖片載入失敗:`, url);
-                                            e.target.style.display = 'none'; 
-                                            e.target.parentElement.style.display = 'none'; 
-                                        }} 
+                                        onError={(e) => { e.target.style.display = 'none'; }} 
                                     />
                                 </div>
                             ))}
@@ -150,7 +144,6 @@
                         </div>
                     )}
                     
-                    {/* 資訊主體 */}
                     <div className="p-5">
                         <div className="flex justify-between items-start mb-6">
                             <h3 className="text-2xl font-extrabold text-white pr-4 drop-shadow-md">{restaurant.name}</h3>
@@ -169,7 +162,6 @@
                             </div>
                         </div>
 
-                        {/* 極簡核心資訊 */}
                         <div className="space-y-4 mb-4">
                             {!restaurant.isHidden && (
                                 <React.Fragment>
@@ -189,7 +181,7 @@
                             )}
                         </div>
 
-                        {/* AI 必點招牌與推薦評論區塊 */}
+                        {/* ✨ AI 必點招牌與推薦評論 */}
                         <div className="space-y-5 border-t border-slate-700/50 pt-5">
                             {restaurant.aiData && typeof restaurant.aiData === 'object' ? (
                                 <React.Fragment>
@@ -226,7 +218,7 @@
                             )}
                         </div>
                         
-                        {/* 📝 個人筆記區塊 */}
+                        {/* 📝 個人筆記 */}
                         <div className="mt-5 pt-5 border-t border-slate-700/50">
                             {isEditing ? (
                                 <div className="bg-slate-800/80 p-3 rounded-xl border border-orange-500/50">
@@ -253,7 +245,6 @@
                         </div>
                     </div>
 
-                    {/* 📍 前往地圖按鈕 */}
                     {!restaurant.isHidden && restaurant.mapUrl && (
                         <div className="bg-slate-800/80 px-5 py-4 border-t border-slate-700/50">
                             <a href={restaurant.mapUrl} target="_blank" rel="noopener noreferrer" className="w-full flex justify-center items-center gap-2 text-sm font-bold text-orange-400 hover:text-orange-300 transition-colors tracking-widest">
@@ -265,7 +256,6 @@
             );
         };
 
-        // --- 主程式 App ---
         function App() {
             const [restaurants, setRestaurants] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
@@ -294,28 +284,19 @@
                                     try { aiSummaryData = JSON.parse(rawAiText); } catch(e) {}
                                 }
                                 
-                                // 🔥🔥🔥 終極暴力網址萃取法 🔥🔥🔥
-                                let parsedPhotoUrls = [];
-                                const rawPhotoUrls = (item['照片網址'] || '').trim();
-                                
-                                if (rawPhotoUrls) {
-                                    // 這個正則表達式會無視引號、括號，直接把文字裡所有 http/https 網址完整吸出來
-                                    const urlMatches = rawPhotoUrls.match(/https?:\/\/[^\s"'<>[\]{}]+/g);
-                                    if (urlMatches) {
-                                        parsedPhotoUrls = urlMatches;
-                                    }
+                                // 🛡️ 強力防呆：確保無論如何都能抓到照片欄位 (第 11 欄, index 10)
+                                let rawPhotoUrls = item['照片網址'] || item['照片'] || '';
+                                if (!rawPhotoUrls) {
+                                    const vals = Object.values(item);
+                                    if (vals.length > 10) rawPhotoUrls = vals[10]; 
                                 }
 
-                                // 搭配原本的 Google Drive 雲端硬碟轉換邏輯
-                                parsedPhotoUrls = parsedPhotoUrls.map(url => {
-                                    if (url.includes('drive.google.com')) {
-                                        const match = url.match(/\/(?:d|file\/d)\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-                                        if (match && match[1]) {
-                                            return `https://drive.google.com/uc?export=view&id=${match[1]}`;
-                                        }
-                                    }
-                                    return url;
-                                });
+                                let parsedPhotoUrls = [];
+                                if (typeof rawPhotoUrls === 'string' && rawPhotoUrls.startsWith('[')) {
+                                    try { parsedPhotoUrls = JSON.parse(rawPhotoUrls); } catch(e) {}
+                                } else if (typeof rawPhotoUrls === 'string' && rawPhotoUrls.startsWith('http')) {
+                                    parsedPhotoUrls = [rawPhotoUrls]; 
+                                }
 
                                 const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
                                 const rawHoursJson = item['營業時間'] || '';
