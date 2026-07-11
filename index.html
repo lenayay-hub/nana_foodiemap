@@ -9,9 +9,9 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        body { 
-            background-color: #0f172a; 
-            font-family: system-ui, -apple-system, sans-serif; 
+        body {
+            background-color: #0f172a;
+            font-family: system-ui, -apple-system, sans-serif;
             -webkit-tap-highlight-color: transparent;
         }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -55,17 +55,17 @@
 
         const categoriesData = {
             food: [
-                { name: "日式", emoji: "🍣" }, { name: "台式", emoji: "🥢" }, { name: "韓式", emoji: "🌶️" },
-                { name: "美式", emoji: "🍔" }, { name: "義式", emoji: "🍝" }, { name: "早午餐", emoji: "🍳" },
+                { name: "日式", emoji: "🍣" }, { name: "台式", emoji: "🥘" }, { name: "韓式", emoji: "🌶️" },
+                { name: "美式", emoji: "🍔" }, { name: "義式", emoji: "🍝" }, { name: "早午餐", emoji: "🥞" },
                 { name: "咖啡廳", emoji: "☕" }, { name: "甜點", emoji: "🍰" }, { name: "火鍋", emoji: "🍲" },
-                { name: "燒肉", emoji: "🥩" }, { name: "餐酒館", emoji: "🥂" }, { name: "小吃", emoji: "🥡" }, { name: "其他", emoji: "🍽️" }
+                { name: "燒肉", emoji: "🥩" }, { name: "餐酒館", emoji: "🍷" }, { name: "小吃", emoji: "🥡" }, { name: "其他", emoji: "🍽️" }
             ],
             spot: [
                 { name: "自然風景", emoji: "⛰️" }, { name: "歷史古蹟", emoji: "🏛️" }, { name: "網美打卡", emoji: "✨" },
-                { name: "展覽藝文", emoji: "🎨" }, { name: "休閒娛樂", emoji: "🎡" }, { name: "其他", emoji: "📍" }
+                { name: "展覽藝文", emoji: "🎨" }, { name: "休閒娛樂", emoji: "🎬" }, { name: "其他", emoji: "📍" }
             ],
             shop: [
-                { name: "美妝保養", emoji: "💄" }, { name: "3C家電", emoji: "💻" }, { name: "服飾配件", emoji: "👗" },
+                { name: "美妝保養", emoji: "💄" }, { name: "3C家電", emoji: "💻" }, { name: "服飾配件", emoji: "👕" },
                 { name: "生活居家", emoji: "🛋️" }, { name: "食品伴手禮", emoji: "🎁" }, { name: "其他", emoji: "📦" }
             ]
         };
@@ -77,15 +77,15 @@
         };
 
         const checkIsOpenNow = (hoursJson) => {
-            if (!hoursJson) return null; 
+            if (!hoursJson) return null;
             try {
                 const hours = JSON.parse(hoursJson);
                 if (!hours || !hours.periods) return null;
                 const twTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Taipei"}));
-                const currentDay = twTime.getDay(); 
+                const currentDay = twTime.getDay();
                 const currentTimeVal = twTime.getHours() * 100 + twTime.getMinutes();
                 for (const period of hours.periods) {
-                    if (period.open && !period.close) return true; 
+                    if (period.open && !period.close) return true;
                     const openDay = period.open.day, openTime = period.open.hour * 100 + period.open.minute;
                     const closeDay = period.close.day, closeTime = period.close.hour * 100 + period.close.minute;
                     if (openDay === closeDay) {
@@ -95,7 +95,7 @@
                         if (currentDay === closeDay && currentTimeVal < closeTime) return true;
                     }
                 }
-                return false; 
+                return false;
             } catch (e) { return null; }
         };
 
@@ -105,7 +105,7 @@
                 const hours = JSON.parse(hoursJson);
                 if (hours.weekdayDescriptions && hours.weekdayDescriptions.length > 0) {
                     const twTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Taipei"}));
-                    let dayIndex = twTime.getDay() - 1; 
+                    let dayIndex = twTime.getDay() - 1;
                     if (dayIndex === -1) dayIndex = 6;  
                     const desc = hours.weekdayDescriptions[dayIndex];
                     const splitIndex = desc.indexOf(':') !== -1 ? desc.indexOf(':') : desc.indexOf('：');
@@ -167,7 +167,7 @@
                             {type === 'shop' ? (
                                 <div className="text-center">
                                     <ShoppingBag size={28} className="mx-auto mb-2 opacity-50 text-emerald-600" />
-                                    <span className="text-xs font-bold tracking-widest text-emerald-600/70">點擊下方按鈕搜尋商品圖片</span>
+                                    <span className="text-xs font-bold tracking-widest text-emerald-600/70">點擊下方方位搜尋商品圖片</span>
                                 </div>
                             ) : (
                                 <div className="text-center">
@@ -222,11 +222,11 @@
                             )}
                         </div>
 
-                        {/* 🔥 深度分析情報區 */}
+                        {/* 🔥 深度分析情報 */}
                         <div className="space-y-5 border-t border-slate-700/50 pt-5">
                             {item.aiData && typeof item.aiData === 'object' ? (
                                 <React.Fragment>
-                                    {/* 🛍️ 購物專屬：在哪裡買的深度分析 */}
+                                    {/* 🛒 購物專屬：在哪裡買的深度分析 */}
                                     {type === 'shop' && item.aiData.whereToBuy && (
                                         <div className="bg-emerald-900/30 border border-emerald-500/30 rounded-xl p-4 mt-2 mb-4 relative overflow-hidden shadow-inner">
                                             <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
@@ -257,7 +257,6 @@
                                             </div>
                                         </div>
                                     )}
-                                    {/* 美食移除推薦原因，景點保留 */}
                                     {item.aiData.reason && type === 'spot' && (
                                         <div className="flex items-start gap-3">
                                             <div className="bg-yellow-500/20 p-1.5 rounded-full mt-0.5"><Lightbulb size={14} className="text-yellow-400" /></div>
@@ -302,7 +301,7 @@
                         </div>
                     </div>
 
-                    {/* 🔥 底部按鈕區：購物專屬雙按鈕 */}
+                    {/* 🔥 底部按鈕 */}
                     {type === 'shop' ? (
                         <div className="bg-slate-800/80 flex flex-col border-t border-slate-700/50">
                             <a href={safeShopeeUrl} target="_blank" rel="noopener noreferrer" className="w-full flex justify-center items-center gap-2 text-sm font-bold text-emerald-400 hover:text-emerald-300 py-4 border-b border-slate-700/50 transition-colors tracking-widest bg-emerald-900/10">
@@ -355,19 +354,33 @@
                             let rawPhotoUrls = item['照片網址'] || item['照片'] || '';
                             if (!rawPhotoUrls) {
                                 const vals = Object.values(item);
-                                if (vals.length > 10) rawPhotoUrls = vals[10]; 
+                                if (vals.length > 10) rawPhotoUrls = vals[10];
                             }
+                            
                             let parsedPhotoUrls = [];
+                            
+                            // 🌟 防盜鏈轉換核心邏輯
                             if (typeof rawPhotoUrls === 'string' && rawPhotoUrls.startsWith('[')) {
-                                try { parsedPhotoUrls = JSON.parse(rawPhotoUrls); } catch(e) {}
+                                try { 
+                                    let tempUrls = JSON.parse(rawPhotoUrls); 
+                                    parsedPhotoUrls = tempUrls.map(url => 
+                                        url.includes('drive.google.com/uc?id=') 
+                                            ? url.replace('/uc?id=', '/thumbnail?id=') + '&sz=w1000' 
+                                            : url
+                                    );
+                                } catch(e) {}
                             } else if (typeof rawPhotoUrls === 'string' && rawPhotoUrls.startsWith('http')) {
-                                parsedPhotoUrls = [rawPhotoUrls]; 
+                                let singleUrl = rawPhotoUrls;
+                                if (singleUrl.includes('drive.google.com/uc?id=')) {
+                                    singleUrl = singleUrl.replace('/uc?id=', '/thumbnail?id=') + '&sz=w1000';
+                                }
+                                parsedPhotoUrls = [singleUrl];
                             }
 
                             const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
                             
                             return {
-                                id: item.id, 
+                                id: item.id,
                                 name: item['店名'] || item['景點名稱'] || item['商品名稱'] || '未命名項目',
                                 city: item['縣市'] || '',
                                 district: item['區域'] || '',
@@ -376,12 +389,13 @@
                                 rating: parseFloat(item['Google評分'] || item['推薦指數']) || 0,
                                 mapUrl: item['地圖連結'] || '',
                                 shopeeUrl: item['蝦皮連結'] || '',
-                                photoUrls: parsedPhotoUrls, 
+                                photoUrls: parsedPhotoUrls,
                                 isHidden: isHidden,
-                                aiData: aiSummaryData || rawAiText, 
-                                personalNote: item['個人註解'] || '', 
+                                aiData: aiSummaryData || rawAiText,
+                                personalNote: item['個人註解'] || '',
                                 isOpenNow: checkIsOpenNow(item['營業時間']),
-                                todayHoursText: getTodayHoursText(item['營業時間']) 
+                                todayHoursText: getTodayHoursText(item['營業時間']),
+                                igUrl: item['IG連結'] || ''
                             };
                         }).filter(item => item.name !== '未命名項目' && item.name !== '');
 
@@ -510,7 +524,7 @@
                         ) : (
                             <div className="animate-fade-in pb-10">
                                 <div className="flex justify-center mb-8">
-                                    <button onClick={() => setHasSearched(false)} className="glass-panel px-5 py-2 rounded-full text-sm font-bold text-gray-300 hover:text-white flex items-center gap-2 transition-colors"><RefreshCcw size={16} /> 重新選擇</button>
+                                    <button onClick={() => setHasSearched(false)} className="glass-panel px-5 py-2 rounded-full text-sm font-bold text-gray-300 hover:text-white flex items-center gap-2 transition-colors"><RefreshCcw size={16} /> 重新篩選</button>
                                 </div>
 
                                 <div className="space-y-8">
