@@ -34,7 +34,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useMemo } = React;
 
         const MapPin = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 0-16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
         const Star = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>;
@@ -47,9 +47,34 @@
         const Save = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>;
         const ImageIcon = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>;
         const ShoppingBag = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>;
+        const Search = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>;
         const Instagram = ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>;
+        const ShoppingCart = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>;
 
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyKXiPyB0px2WYHW2l2CxeCID-yj2ixog9FezvrPYuzfgX9MSAtRcP-hqj3yQTTBbUi/exec';
+
+        const categoriesData = {
+            food: [
+                { name: "日式", emoji: "🍣" }, { name: "台式", emoji: "🥢" }, { name: "韓式", emoji: "🌶️" },
+                { name: "美式", emoji: "🍔" }, { name: "義式", emoji: "🍝" }, { name: "早午餐", emoji: "🍳" },
+                { name: "咖啡廳", emoji: "☕" }, { name: "甜點", emoji: "🍰" }, { name: "火鍋", emoji: "🍲" },
+                { name: "燒肉", emoji: "🥩" }, { name: "餐酒館", emoji: "🥂" }, { name: "小吃", emoji: "🥡" }, { name: "其他", emoji: "🍽️" }
+            ],
+            spot: [
+                { name: "自然風景", emoji: "⛰️" }, { name: "歷史古蹟", emoji: "🏛️" }, { name: "網美打卡", emoji: "✨" },
+                { name: "展覽藝文", emoji: "🎨" }, { name: "休閒娛樂", emoji: "🎡" }, { name: "其他", emoji: "📍" }
+            ],
+            shop: [
+                { name: "美妝保養", emoji: "💄" }, { name: "3C家電", emoji: "💻" }, { name: "服飾配件", emoji: "👗" },
+                { name: "生活居家", emoji: "🛋️" }, { name: "食品伴手禮", emoji: "🎁" }, { name: "其他", emoji: "📦" }
+            ]
+        };
+
+        const getEmoji = (tab, typeName) => {
+            const list = categoriesData[tab] || [];
+            const found = list.find(c => c.name === typeName);
+            return found ? `${typeName} ${found.emoji}` : typeName;
+        };
 
         const checkIsOpenNow = (hoursJson) => {
             if (!hoursJson) return null; 
@@ -90,9 +115,9 @@
             return '依現場公告為主';
         };
 
-        const RestaurantCard = ({ restaurant, type }) => {
+        const UniversalCard = ({ item, type }) => {
             const [isEditing, setIsEditing] = useState(false);
-            const [noteContent, setNoteContent] = useState(restaurant.personalNote || '');
+            const [noteContent, setNoteContent] = useState(item.personalNote || '');
             const [isSaving, setIsSaving] = useState(false);
 
             const handleSaveNote = async () => {
@@ -100,9 +125,9 @@
                 try {
                     const tabName = type === 'food' ? 'Food' : (type === 'spot' ? 'Spot' : 'Shop');
                     await fetch(GAS_API_URL, {
-                        method: 'POST', body: JSON.stringify({ action: 'updateNote', rowId: restaurant.id, note: noteContent, tabName: tabName })
+                        method: 'POST', body: JSON.stringify({ action: 'updateNote', rowId: item.id, note: noteContent, tabName: tabName })
                     });
-                    restaurant.personalNote = noteContent;
+                    item.personalNote = noteContent;
                     setIsEditing(false);
                 } catch (error) {
                     alert('儲存失敗，請確認網路連線！');
@@ -112,61 +137,54 @@
             };
 
             let priceDisplay = 'NT$ 不明';
-            if (restaurant.aiData && restaurant.aiData.exactPrice && restaurant.aiData.exactPrice !== "依現場為主") {
-                priceDisplay = restaurant.aiData.exactPrice;
+            if (item.aiData && item.aiData.exactPrice && item.aiData.exactPrice !== "依現場為主") {
+                priceDisplay = item.aiData.exactPrice;
             } else {
-                const num = restaurant.priceLevel;
+                const num = item.priceLevel;
                 if (num === 1) priceDisplay = '約 NT$100-300';
                 else if (num === 2) priceDisplay = '約 NT$300-800';
                 else if (num === 3) priceDisplay = '約 NT$800-1500';
                 else if (num >= 4) priceDisplay = 'NT$1500+';
             }
 
-            // 依據不同分類套用顏色
             const accentBorder = type === 'food' ? 'border-l-orange-500' : (type === 'spot' ? 'border-l-purple-500' : 'border-l-emerald-500');
-            const targetUrl = type === 'shop' ? restaurant.shopeeUrl : restaurant.mapUrl;
-            const linkText = type === 'food' ? '在 Google 地圖開啟' : (type === 'spot' ? '在 Google 地圖開啟' : '前往蝦皮比價');
+            const safeShopeeUrl = item.shopeeUrl ? item.shopeeUrl : `https://shopee.tw/search?keyword=${encodeURIComponent(item.name)}`;
+            const googleImageUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(item.name)}`;
 
             return (
                 <div className={`glass-panel rounded-2xl overflow-hidden relative border-l-4 ${accentBorder} animate-fade-in group shadow-2xl mb-8`}>
                     
-                    {/* 📸 照片顯示區塊 (保留妳最完美的容錯邏輯) */}
-                    {restaurant.photoUrls && restaurant.photoUrls.length > 0 ? (
+                    {item.photoUrls && item.photoUrls.length > 0 ? (
                         <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar p-4 gap-3 bg-slate-800/40 border-b border-slate-700/50">
-                            {restaurant.photoUrls.map((url, index) => (
+                            {item.photoUrls.map((url, index) => (
                                 <div key={index} className="snap-center shrink-0 w-[85%] h-52 rounded-xl overflow-hidden relative shadow-lg border border-slate-700/50">
-                                    <img 
-                                        src={url} 
-                                        referrerPolicy="no-referrer"
-                                        className="w-full h-full object-cover" 
-                                        alt={`照片 ${index + 1}`}
-                                        onError={(e) => { e.target.style.display = 'none'; }} 
-                                    />
+                                    <img src={url} referrerPolicy="no-referrer" className="w-full h-full object-cover" alt={`照片 ${index + 1}`} onError={(e) => { e.target.style.display = 'none'; }} />
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="w-full h-40 bg-slate-800/30 flex flex-col items-center justify-center border-b border-slate-700/50">
-                            <ImageIcon size={32} className="text-slate-600 mb-2" />
-                            <span className="text-slate-500 text-sm font-bold tracking-widest">目前沒有照片</span>
+                        <div className="w-full h-32 bg-slate-800/30 flex flex-col items-center justify-center border-b border-slate-700/50 text-slate-500">
+                            {type === 'shop' ? (
+                                <div className="text-center">
+                                    <ShoppingBag size={28} className="mx-auto mb-2 opacity-50 text-emerald-600" />
+                                    <span className="text-xs font-bold tracking-widest text-emerald-600/70">點擊下方按鈕搜尋商品圖片</span>
+                                </div>
+                            ) : (
+                                <div className="text-center">
+                                    <ImageIcon size={28} className="mx-auto mb-2 opacity-50" />
+                                    <span className="text-xs font-bold tracking-widest">目前沒有照片</span>
+                                </div>
+                            )}
                         </div>
                     )}
                     
                     <div className="p-5">
                         <div className="flex justify-between items-start mb-6">
-                            <h3 className="text-2xl font-extrabold text-white pr-4 drop-shadow-md">{restaurant.name}</h3>
+                            <h3 className="text-2xl font-extrabold text-white pr-4 drop-shadow-md">{item.name}</h3>
                             <div className="flex flex-col items-end gap-1 shrink-0">
-                                {restaurant.isHidden && type !== 'shop' && (
-                                    <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-bold px-2 py-1 rounded-full">隱藏版</span>
-                                )}
-                                {restaurant.isOpenNow === true && type !== 'shop' && (
-                                    <span className="bg-green-500/20 text-green-400 border border-green-500/30 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> 營業中
-                                    </span>
-                                )}
-                                {restaurant.isOpenNow === false && type !== 'shop' && (
-                                    <span className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-[10px] font-bold px-2 py-1 rounded-full">休息中</span>
-                                )}
+                                {item.isHidden && type !== 'shop' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-bold px-2 py-1 rounded-full">隱藏版</span>}
+                                {item.isOpenNow === true && type !== 'shop' && <span className="bg-green-500/20 text-green-400 border border-green-500/30 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> 營業中</span>}
+                                {item.isOpenNow === false && type !== 'shop' && <span className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-[10px] font-bold px-2 py-1 rounded-full">休息中</span>}
                             </div>
                         </div>
 
@@ -175,11 +193,11 @@
                                 <React.Fragment>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <Star size={18} className={`${type==='food'?'text-yellow-400 fill-yellow-400':'text-purple-400 fill-purple-400'} shrink-0`} />
-                                        <span><strong className="text-white tracking-wide">Google 評分：</strong>{restaurant.rating > 0 ? `${restaurant.rating} 顆星` : '尚未評分'}</span>
+                                        <span><strong className="text-white tracking-wide">Google 評分：</strong>{item.rating > 0 ? `${item.rating} 顆星` : '尚未評分'}</span>
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <Clock size={18} className="text-gray-400 shrink-0" />
-                                        <span><strong className="text-white tracking-wide">營業時間：</strong>今日 {restaurant.todayHoursText}</span>
+                                        <span><strong className="text-white tracking-wide">營業時間：</strong>今日 {item.todayHoursText}</span>
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <DollarSign size={18} className={`${type==='food'?'text-orange-300':'text-purple-300'} shrink-0`} />
@@ -190,86 +208,93 @@
                                 <React.Fragment>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <Star size={18} className="text-emerald-400 fill-emerald-400 shrink-0" />
-                                        <span><strong className="text-white tracking-wide">推薦指數：</strong>{restaurant.rating || '4.5/5'}</span>
+                                        <span><strong className="text-white tracking-wide">推薦指數：</strong>{item.rating || '4.5/5'}</span>
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <ShoppingBag size={18} className="text-gray-400 shrink-0" />
-                                        <span><strong className="text-white tracking-wide">分類標籤：</strong>{restaurant.foodType}</span>
+                                        <span><strong className="text-white tracking-wide">分類標籤：</strong>{getEmoji('shop', item.foodType)}</span>
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <DollarSign size={18} className="text-emerald-300 shrink-0" />
-                                        <span><strong className="text-white tracking-wide">合理市價：</strong>{restaurant.priceLevel}</span>
+                                        <span><strong className="text-white tracking-wide">合理市價：</strong>{item.priceLevel}</span>
                                     </div>
                                 </React.Fragment>
                             )}
                         </div>
 
-                        {/* ✨ AI 評論區塊 */}
+                        {/* 🔥 深度分析情報區 */}
                         <div className="space-y-5 border-t border-slate-700/50 pt-5">
-                            {restaurant.aiData && typeof restaurant.aiData === 'object' ? (
+                            {item.aiData && typeof item.aiData === 'object' ? (
                                 <React.Fragment>
-                                    {restaurant.aiData.signature && (
+                                    {/* 🛍️ 購物專屬：在哪裡買的深度分析 */}
+                                    {type === 'shop' && item.aiData.whereToBuy && (
+                                        <div className="bg-emerald-900/30 border border-emerald-500/30 rounded-xl p-4 mt-2 mb-4 relative overflow-hidden shadow-inner">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                                            <div className="flex items-center gap-2 mb-2 text-emerald-400 font-bold">
+                                                <ShoppingCart size={16} /> 深度通路情報
+                                            </div>
+                                            <div className="text-sm text-emerald-50/90 leading-relaxed whitespace-pre-wrap">
+                                                {item.aiData.whereToBuy}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {item.aiData.signature && (
                                         <div className="flex items-start gap-3">
                                             <div className="bg-slate-700/50 p-1.5 rounded-full mt-0.5"><Star size={14} className={type==='food'?'text-orange-400':(type==='spot'?'text-purple-400':'text-emerald-400')} /></div>
                                             <div className="leading-relaxed">
                                                 <span className="text-sm font-bold text-white mr-2">{type==='food'?'必點招牌：':(type==='spot'?'打卡亮點：':'商品用途：')}</span>
-                                                <span className="text-sm text-gray-400">{restaurant.aiData.signature}</span>
+                                                <span className="text-sm text-gray-400">{item.aiData.signature}</span>
                                             </div>
                                         </div>
                                     )}
-                                    {restaurant.aiData.review && (
+                                    {item.aiData.review && (
                                         <div className="flex items-start gap-3">
                                             <div className="bg-blue-500/20 p-1.5 rounded-full mt-0.5"><MessageSquare size={14} className="text-blue-400" /></div>
                                             <div className="leading-relaxed">
                                                 <span className="text-sm font-bold text-white mr-2">{type==='shop'?'網路評價：':'評論摘要：'}</span>
-                                                <span className="text-sm text-gray-400">{restaurant.aiData.review}</span>
+                                                <span className="text-sm text-gray-400">{item.aiData.review}</span>
                                             </div>
                                         </div>
                                     )}
-                                    {restaurant.aiData.reason && type !== 'shop' && (
+                                    {/* 美食移除推薦原因，景點保留 */}
+                                    {item.aiData.reason && type === 'spot' && (
                                         <div className="flex items-start gap-3">
                                             <div className="bg-yellow-500/20 p-1.5 rounded-full mt-0.5"><Lightbulb size={14} className="text-yellow-400" /></div>
                                             <div className="leading-relaxed">
-                                                <span className="text-sm font-bold text-white mr-2">{type==='food'?'推薦原因：':'貼心提醒：'}</span>
-                                                <span className="text-sm text-gray-400">{restaurant.aiData.reason}</span>
+                                                <span className="text-sm font-bold text-white mr-2">貼心提醒：</span>
+                                                <span className="text-sm text-gray-400">{item.aiData.reason}</span>
                                             </div>
                                         </div>
                                     )}
                                 </React.Fragment>
                             ) : (
-                                restaurant.aiData && <p className="text-sm text-gray-400 italic">" {restaurant.aiData} "</p>
+                                item.aiData && <p className="text-sm text-gray-400 italic">" {item.aiData} "</p>
                             )}
 
-                            {/* IG 連結 */}
-                            {type === 'spot' && restaurant.igUrl && (
-                                <div className="mt-3">
-                                    <a href={restaurant.igUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-purple-600/20 text-purple-400 border border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-purple-600/40 transition-colors">
+                            {type === 'spot' && item.igUrl && (
+                                <div className="mt-4 pt-2">
+                                    <a href={item.igUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-purple-600/20 text-purple-400 border border-purple-500/30 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-purple-600/40 transition-colors">
                                         <Instagram size={16} /> 點此看 IG 網美熱門打卡照 📸
                                     </a>
                                 </div>
                             )}
                         </div>
                         
-                        {/* 📝 個人筆記區塊 */}
                         <div className="mt-5 pt-5 border-t border-slate-700/50">
                             {isEditing ? (
-                                <div className="bg-slate-800/80 p-3 rounded-xl border border-orange-500/50">
-                                    <textarea 
-                                        className="w-full bg-transparent text-sm text-gray-200 outline-none resize-none placeholder-gray-500 min-h-[60px]"
-                                        placeholder="寫下你的評語或紀錄..." value={noteContent} onChange={(e) => setNoteContent(e.target.value)} autoFocus
-                                    />
+                                <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-600">
+                                    <textarea className="w-full bg-transparent text-sm text-gray-200 outline-none resize-none placeholder-gray-500 min-h-[60px]" placeholder="寫下你的評語或紀錄..." value={noteContent} onChange={(e) => setNoteContent(e.target.value)} autoFocus />
                                     <div className="flex justify-end gap-2 mt-2">
                                         <button onClick={() => setIsEditing(false)} className="text-xs text-gray-400 px-3 py-1 hover:text-white" disabled={isSaving}>取消</button>
-                                        <button onClick={handleSaveNote} className="flex items-center gap-1 text-xs bg-slate-700 text-white px-3 py-1.5 rounded-lg hover:bg-slate-600 disabled:opacity-50" disabled={isSaving}>
-                                            {isSaving ? '儲存中...' : <React.Fragment><Save size={12} /> 儲存筆記</React.Fragment>}
-                                        </button>
+                                        <button onClick={handleSaveNote} className="flex items-center gap-1 text-xs bg-slate-700 text-white px-3 py-1.5 rounded-lg hover:bg-slate-600 disabled:opacity-50" disabled={isSaving}>{isSaving ? '儲存中...' : <React.Fragment><Save size={12} /> 儲存</React.Fragment>}</button>
                                     </div>
                                 </div>
                             ) : (
                                 <div className="bg-slate-800/40 hover:bg-slate-800/80 p-3 rounded-xl border border-dashed border-slate-600/50 cursor-text transition-colors group flex items-start justify-between gap-2" onClick={() => setIsEditing(true)}>
                                     <div className="flex items-start gap-2 text-sm text-gray-300">
                                         <Edit3 size={14} className="text-gray-500 mt-0.5 shrink-0" />
-                                        <span className={restaurant.personalNote ? '' : 'text-gray-500 italic'}>{restaurant.personalNote || '點此新增個人筆記...'}</span>
+                                        <span className={item.personalNote ? '' : 'text-gray-500 italic'}>{item.personalNote || '點此新增個人筆記...'}</span>
                                     </div>
                                     <span className="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pt-0.5">編輯</span>
                                 </div>
@@ -277,12 +302,24 @@
                         </div>
                     </div>
 
-                    {!restaurant.isHidden && targetUrl && (
-                        <div className="bg-slate-800/80 px-5 py-4 border-t border-slate-700/50">
-                            <a href={targetUrl} target="_blank" rel="noopener noreferrer" className={`w-full flex justify-center items-center gap-2 text-sm font-bold transition-colors tracking-widest ${type==='shop'?'text-emerald-400 hover:text-emerald-300':(type==='spot'?'text-purple-400 hover:text-purple-300':'text-orange-400 hover:text-orange-300')}`}>
-                                {type === 'shop' && <ShoppingBag size={16} />} {linkText}
+                    {/* 🔥 底部按鈕區：購物專屬雙按鈕 */}
+                    {type === 'shop' ? (
+                        <div className="bg-slate-800/80 flex flex-col border-t border-slate-700/50">
+                            <a href={safeShopeeUrl} target="_blank" rel="noopener noreferrer" className="w-full flex justify-center items-center gap-2 text-sm font-bold text-emerald-400 hover:text-emerald-300 py-4 border-b border-slate-700/50 transition-colors tracking-widest bg-emerald-900/10">
+                                <ShoppingBag size={18} /> 前往蝦皮一鍵比價
+                            </a>
+                            <a href={googleImageUrl} target="_blank" rel="noopener noreferrer" className="w-full flex justify-center items-center gap-2 text-xs font-bold text-gray-400 hover:text-white py-3.5 transition-colors tracking-widest">
+                                <Search size={14} className="text-blue-400" /> Google 圖片搜尋
                             </a>
                         </div>
+                    ) : (
+                        !item.isHidden && item.mapUrl && (
+                            <div className="bg-slate-800/80 px-5 py-4 border-t border-slate-700/50">
+                                <a href={item.mapUrl} target="_blank" rel="noopener noreferrer" className={`w-full flex justify-center items-center gap-2 text-sm font-bold transition-colors tracking-widest ${type==='spot'?'text-purple-400 hover:text-purple-300':'text-orange-400 hover:text-orange-300'}`}>
+                                    <MapPin size={16} /> 在 Google 地圖開啟
+                                </a>
+                            </div>
+                        )
                     )}
                 </div>
             );
@@ -315,13 +352,11 @@
                                 try { aiSummaryData = JSON.parse(rawAiText); } catch(e) {}
                             }
                             
-                            // 🛡️ 妳的超強防呆照片處理邏輯 (100%保留)
                             let rawPhotoUrls = item['照片網址'] || item['照片'] || '';
                             if (!rawPhotoUrls) {
                                 const vals = Object.values(item);
                                 if (vals.length > 10) rawPhotoUrls = vals[10]; 
                             }
-
                             let parsedPhotoUrls = [];
                             if (typeof rawPhotoUrls === 'string' && rawPhotoUrls.startsWith('[')) {
                                 try { parsedPhotoUrls = JSON.parse(rawPhotoUrls); } catch(e) {}
@@ -330,8 +365,7 @@
                             }
 
                             const isHidden = !item['地圖連結'] || item['地圖連結'] === "";
-                            const rawHoursJson = item['營業時間'] || '';
-
+                            
                             return {
                                 id: item.id, 
                                 name: item['店名'] || item['景點名稱'] || item['商品名稱'] || '未命名項目',
@@ -342,26 +376,19 @@
                                 rating: parseFloat(item['Google評分'] || item['推薦指數']) || 0,
                                 mapUrl: item['地圖連結'] || '',
                                 shopeeUrl: item['蝦皮連結'] || '',
-                                igUrl: item['IG連結'] || '',
                                 photoUrls: parsedPhotoUrls, 
                                 isHidden: isHidden,
                                 aiData: aiSummaryData || rawAiText, 
                                 personalNote: item['個人註解'] || '', 
-                                isOpenNow: checkIsOpenNow(rawHoursJson),
-                                todayHoursText: getTodayHoursText(rawHoursJson) 
+                                isOpenNow: checkIsOpenNow(item['營業時間']),
+                                todayHoursText: getTodayHoursText(item['營業時間']) 
                             };
                         }).filter(item => item.name !== '未命名項目' && item.name !== '');
 
                         if (Array.isArray(data)) {
-                            // 舊格式相容
                             setDb({ food: formatData(data).reverse(), spot: [], shop: [] });
                         } else {
-                            // 新格式支援
-                            setDb({
-                                food: formatData(data.food).reverse(),
-                                spot: formatData(data.spot).reverse(),
-                                shop: formatData(data.shop).reverse()
-                            });
+                            setDb({ food: formatData(data.food).reverse(), spot: formatData(data.spot).reverse(), shop: formatData(data.shop).reverse() });
                         }
                     } catch (err) {
                         setFetchError("無法取得資料庫列表");
@@ -376,7 +403,6 @@
 
             const availableCities = useMemo(() => [...new Set(currentList.map(r => r.city).filter(c => c && c !== '隱藏版' && c !== '未知'))].sort(), [currentList]);
             const availableDistricts = useMemo(() => !selectedCity ? [] : [...new Set(currentList.filter(r => r.city === selectedCity).map(r => r.district).filter(d => d && d !== '未知區域'))].sort(), [currentList, selectedCity]);
-            const availableFoodTypes = useMemo(() => [...new Set(currentList.map(r => r.foodType).filter(t => t && t !== '美食'))].sort(), [currentList]);
 
             const filteredItems = useMemo(() => {
                 return currentList.filter(item => {
@@ -418,7 +444,6 @@
 
                     <div className="relative z-10 max-w-md mx-auto px-5 pt-8">
                         
-                        {/* 🌟 完美融合的三大分類按鈕 */}
                         <div className="flex justify-center gap-3 mb-8">
                             <button onClick={()=>handleTabChange('food')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${currentTab==='food' ? 'bg-orange-500 text-white shadow-orange-500/40' : 'bg-slate-800/60 text-gray-400 border border-slate-700'}`}>🍽️ 美食</button>
                             <button onClick={()=>handleTabChange('spot')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${currentTab==='spot' ? 'bg-purple-500 text-white shadow-purple-500/40' : 'bg-slate-800/60 text-gray-400 border border-slate-700'}`}>📸 景點</button>
@@ -432,7 +457,7 @@
                                         {currentTab === 'food' ? '娜娜的美食大冒險' : (currentTab === 'spot' ? '娜娜的仙女打卡圖鑑' : '娜娜的購物戰利品')}
                                     </h1>
                                     <p className="text-sm text-gray-300 font-medium tracking-widest">
-                                        {currentTab === 'food' ? '探索隱藏美味，建立你的專屬圖鑑' : (currentTab === 'spot' ? '紀錄最美風景與完美回憶' : '精準比價，買得聰明又漂亮')}
+                                        {currentTab === 'food' ? '探索隱藏美味，建立專屬圖鑑' : (currentTab === 'spot' ? '紀錄最美風景與完美回憶' : '深度情報比價，買得聰明又漂亮')}
                                     </p>
                                 </div>
 
@@ -464,7 +489,7 @@
                                         </label>
                                         <select className={`w-full bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-${theme}-500 appearance-none disabled:opacity-50`} value={selectedFoodType} onChange={(e) => setSelectedFoodType(e.target.value)} disabled={isHiddenGem || isLoading}>
                                             <option value="">全部</option>
-                                            {availableFoodTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {categoriesData[currentTab].map(c => <option key={c.name} value={c.name}>{c.name} {c.emoji}</option>)}
                                         </select>
                                     </div>
 
@@ -493,7 +518,7 @@
                                         <div className="text-center py-12 glass-panel rounded-2xl"><p className="text-gray-400">目前沒有符合條件的項目喔！</p></div>
                                     ) : (
                                         filteredItems.map((item) => (
-                                            <RestaurantCard key={item.id} restaurant={item} type={currentTab} />
+                                            <UniversalCard key={item.id} item={item} type={currentTab} />
                                         ))
                                     )}
                                 </div>
