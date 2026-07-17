@@ -50,6 +50,8 @@
         const Search = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>;
         const Instagram = ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>;
         const ShoppingCart = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>;
+        // 新增的垃圾桶 Icon
+        const Trash2 = ({size=20, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
 
         const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyKXiPyB0px2WYHW2l2CxeCID-yj2ixog9FezvrPYuzfgX9MSAtRcP-hqj3yQTTBbUi/exec';
 
@@ -115,13 +117,21 @@
             return '依現場公告為主';
         };
 
-        const UniversalCard = ({ item, type }) => {
+        // 修改：加入 onUpdate, onDelete 屬性接收
+        const UniversalCard = ({ item, type, onUpdate, onDelete }) => {
             const [isEditing, setIsEditing] = useState(false);
             const [noteContent, setNoteContent] = useState(item.personalNote || '');
             const [isSaving, setIsSaving] = useState(false);
+            
+            // 新增的 state：錯誤提示、分類編輯、刪除狀態
+            const [errorMsg, setErrorMsg] = useState("");
+            const [isEditingCategory, setIsEditingCategory] = useState(false);
+            const [isDeleting, setIsDeleting] = useState(false);
+            const [deleteConfirm, setDeleteConfirm] = useState(false);
 
             const handleSaveNote = async () => {
                 setIsSaving(true);
+                setErrorMsg("");
                 try {
                     const tabName = type === 'food' ? 'Food' : (type === 'spot' ? 'Spot' : 'Shop');
                     await fetch(GAS_API_URL, {
@@ -130,9 +140,38 @@
                     item.personalNote = noteContent;
                     setIsEditing(false);
                 } catch (error) {
-                    alert('儲存失敗，請確認網路連線！');
+                    // 修改：改用優雅的提示而非 alert()
+                    setErrorMsg('儲存失敗，請確認網路連線！'); 
                 } finally {
                     setIsSaving(false);
+                }
+            };
+
+            // 新增：儲存分類修改邏輯，並通知 App 更新資料觸發篩選連動
+            const handleSaveCategory = async (newCategory) => {
+                try {
+                    setIsEditingCategory(false);
+                    await fetch(GAS_API_URL, {
+                        method: 'POST', body: JSON.stringify({ action: 'updateCategory', rowId: item.id, category: newCategory })
+                    });
+                    if(onUpdate) onUpdate(type, item.id, { foodType: newCategory }); 
+                } catch (error) {
+                    setErrorMsg('分類更新失敗！');
+                }
+            };
+
+            // 新增：刪除項目邏輯，通知 App 從清單移除
+            const handleDelete = async () => {
+                setIsDeleting(true);
+                try {
+                    await fetch(GAS_API_URL, {
+                        method: 'POST', body: JSON.stringify({ action: 'deleteItem', rowId: item.id, tabName: 'Shop' })
+                    });
+                    if(onDelete) onDelete(type, item.id);
+                } catch (error) {
+                    setErrorMsg('刪除失敗，請確認網路連線！');
+                    setIsDeleting(false);
+                    setDeleteConfirm(false);
                 }
             };
 
@@ -185,8 +224,25 @@
                                 {item.isHidden && type !== 'shop' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-bold px-2 py-1 rounded-full">隱藏版</span>}
                                 {item.isOpenNow === true && type !== 'shop' && <span className="bg-green-500/20 text-green-400 border border-green-500/30 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> 營業中</span>}
                                 {item.isOpenNow === false && type !== 'shop' && <span className="bg-gray-500/20 text-gray-400 border border-gray-500/30 text-[10px] font-bold px-2 py-1 rounded-full">休息中</span>}
+                                
+                                {/* 新增：購物模式專屬防呆刪除按鈕 */}
+                                {type === 'shop' && (
+                                    deleteConfirm ? (
+                                        <div className="flex gap-2 bg-slate-800 p-1.5 rounded-lg border border-red-500/30 shadow-lg">
+                                            <button onClick={handleDelete} className="text-[10px] font-bold bg-red-500/80 text-white px-2 py-1 rounded hover:bg-red-500 transition-colors" disabled={isDeleting}>{isDeleting ? '刪除中...' : '確定刪除'}</button>
+                                            <button onClick={() => setDeleteConfirm(false)} className="text-[10px] font-bold bg-gray-600/80 text-white px-2 py-1 rounded hover:bg-gray-500 transition-colors" disabled={isDeleting}>取消</button>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => setDeleteConfirm(true)} className="text-xs text-gray-500 hover:text-red-400 p-1.5 rounded-full hover:bg-red-500/10 transition-colors" title="刪除商品">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )
+                                )}
                             </div>
                         </div>
+
+                        {/* 新增：錯誤訊息提示區域 */}
+                        {errorMsg && <div className="mb-4 text-xs text-red-400 bg-red-500/10 p-2 rounded border border-red-500/20">{errorMsg}</div>}
 
                         <div className="space-y-4 mb-4">
                             {type !== 'shop' ? (
@@ -212,7 +268,28 @@
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <ShoppingBag size={18} className="text-gray-400 shrink-0" />
-                                        <span><strong className="text-white tracking-wide">分類標籤：</strong>{getEmoji('shop', item.foodType)}</span>
+                                        <div className="flex items-center gap-2">
+                                            <strong className="text-white tracking-wide">分類標籤：</strong>
+                                            {/* 新增：實作可點擊切換的分類選單 */}
+                                            {isEditingCategory ? (
+                                                <select
+                                                    className="bg-slate-700 text-white rounded px-2 py-1 outline-none text-xs border border-emerald-500/50 focus:border-emerald-500"
+                                                    value={item.foodType}
+                                                    onChange={(e) => handleSaveCategory(e.target.value)}
+                                                    onBlur={() => setIsEditingCategory(false)}
+                                                    autoFocus
+                                                >
+                                                    {categoriesData['shop'].map(c => (
+                                                        <option key={c.name} value={c.name}>{c.name}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <span className="flex items-center gap-2 group cursor-pointer hover:text-emerald-300 transition-colors" onClick={() => setIsEditingCategory(true)} title="點擊修改分類">
+                                                    {getEmoji('shop', item.foodType)}
+                                                    <Edit3 size={12} className="text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-300">
                                         <DollarSign size={18} className="text-emerald-300 shrink-0" />
@@ -359,7 +436,7 @@
                             
                             let parsedPhotoUrls = [];
                             
-                            // 🌟 防盜鏈轉換核心邏輯
+                            // 🌟 防盜鏈轉換核心邏輯 (完全保留)
                             if (typeof rawPhotoUrls === 'string' && rawPhotoUrls.startsWith('[')) {
                                 try { 
                                     let tempUrls = JSON.parse(rawPhotoUrls); 
@@ -412,6 +489,22 @@
                 };
                 fetchData();
             }, []);
+
+            // 新增：在 App 層級提供狀態更新的方法，確保改完分類後搜尋列無縫連動
+            const handleUpdateItem = (type, id, newFields) => {
+                setDb(prev => {
+                    const newList = prev[type].map(item => item.id === id ? { ...item, ...newFields } : item);
+                    return { ...prev, [type]: newList };
+                });
+            };
+
+            // 新增：在 App 層級提供狀態刪除的方法
+            const handleDeleteItem = (type, id) => {
+                setDb(prev => {
+                    const newList = prev[type].filter(item => item.id !== id);
+                    return { ...prev, [type]: newList };
+                });
+            };
 
             const currentList = db[currentTab] || [];
 
@@ -532,7 +625,8 @@
                                         <div className="text-center py-12 glass-panel rounded-2xl"><p className="text-gray-400">目前沒有符合條件的項目喔！</p></div>
                                     ) : (
                                         filteredItems.map((item) => (
-                                            <UniversalCard key={item.id} item={item} type={currentTab} />
+                                            /* 修改：傳遞 onUpdate 與 onDelete 屬性 */
+                                            <UniversalCard key={item.id} item={item} type={currentTab} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} />
                                         ))
                                     )}
                                 </div>
