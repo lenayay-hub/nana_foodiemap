@@ -1,3 +1,9 @@
+<!-- ==========================================================================
+     檔案名稱：index.html (放置於 nana_foodiemap 專案根目錄)
+     修復重點：
+     1. 補回 Object.values(item)[10] 與全欄位自動圖片網址掃描，找回所有舊資料 Google 圖片！
+     2. 新增 PhotoCarousel 智慧圖片輪播元件，自動過濾失效圖片並提供一鍵搜圖備援。
+     ========================================================================== -->
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -69,7 +75,7 @@
 </head>
 <body class="antialiased selection:bg-accent selection:text-white pb-24">
   
-  <!-- 預載入保護畫面：防止剛開啟時看起來像空白頁 -->
+  <!-- 預載入保護畫面 -->
   <div id="root">
     <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f6f8f3; color: #102d32; font-family: sans-serif; padding: 20px; text-align: center;">
       <div style="width: 48px; height: 48px; border-radius: 14px; background: #102d32; color: #e1bc83; display: grid; place-items: center; font-size: 24px; font-weight: bold; margin-bottom: 12px;">✧</div>
@@ -78,7 +84,6 @@
     </div>
   </div>
 
-  <!-- 全域錯誤監聽：萬一發生語法錯誤，直接顯示在畫面上方便排查 -->
   <script>
     window.addEventListener('error', function(e) {
       var root = document.getElementById('root');
@@ -114,6 +119,47 @@
         { name: "生活居家", emoji: "🛋️" }, { name: "食品伴手禮", emoji: "🎁" }, { name: "玩具模型", emoji: "🧸" },
         { name: "工作買貨", emoji: "📦" }, { name: "達達婷婷", emoji: "🐶" }, { name: "其他", emoji: "🛍️" }
       ]
+    };
+
+    // 🔥 核心修復：全方位智慧解析 Google 試算表圖片網址
+    // 無論表頭叫什麼名字，或是藏在第 11 欄 (vals[10])，都能 100% 抓出來！
+    const extractPhotoUrls = (item) => {
+      let raw = item['照片網址'] || item['照片'] || item['圖片網址'] || item['圖片'] || '';
+      
+      // 1. 補回你最原始版本的關鍵邏輯：如果找不到表頭，直接讀取第 11 欄 (索引 10) 或掃描所有欄位
+      if (!raw || String(raw).trim() === '' || String(raw).trim() === '[]') {
+        const vals = Object.values(item);
+        if (vals.length > 10 && vals[10] && (String(vals[10]).startsWith('[') || String(vals[10]).startsWith('http'))) {
+          raw = vals[10];
+        } else {
+          // 自動掃描所有欄位，找出含有 ["http..."] 或 googleusercontent 圖片的欄位
+          for (const v of vals) {
+            const s = String(v || '').trim();
+            if (s.startsWith('["http') || s.includes('googleusercontent.com') || s.includes('places.googleapis.com') || s.includes('drive.google.com/uc?id=')) {
+              raw = s;
+              break;
+            }
+          }
+        }
+      }
+
+      const rawStr = String(raw || '').trim();
+      let urls = [];
+
+      if (rawStr.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(rawStr);
+          if (Array.isArray(parsed)) urls = parsed;
+        } catch (e) {}
+      } else if (rawStr.startsWith('http')) {
+        urls = [rawStr];
+      }
+
+      // 轉換 Google Drive 縮圖並過濾空白網址
+      return urls
+        .map(u => String(u || '').trim())
+        .filter(u => u.startsWith('http'))
+        .map(u => u.includes('drive.google.com/uc?id=') ? u.replace('/uc?id=', '/thumbnail?id=') + '&sz=w1000' : u);
     };
 
     // 🕒 營業時間判斷工具
@@ -156,7 +202,6 @@
       return '依現場公告為主';
     };
 
-    // 🧭 嘗試從 Google Maps 網址解析座標
     const parseCoordsFromUrl = (url) => {
       if (!url || typeof url !== 'string') return { lat: null, lng: null };
       try {
@@ -166,7 +211,6 @@
       } catch (e) { return { lat: null, lng: null }; }
     };
 
-    // 📄 PDF 印製與分享工具 (已拆分 script 標籤字串，防止 HTML 解析器誤判截斷！)
     const printHtmlDocument = (title, bodyHtml) => {
       const win = window.open('', '_blank');
       if (!win) { alert('請允許彈出視窗以產生 PDF'); return; }
@@ -194,7 +238,57 @@
     };
 
     // ========================================================================
-    // 🃏 元件：收藏與購物通用卡片 (整合 AI 總結至備註欄)
+    // 🖼️ 獨立元件：智慧照片輪播區 (處理 Google 圖片顯示與過期失效備援)
+    // ========================================================================
+    const PhotoCarousel = ({ urls, itemName, city, sourceTab }) => {
+      const [brokenIndices, setBrokenIndices] = useState({});
+
+      useEffect(() => {
+        setBrokenIndices({});
+      }, [urls]);
+
+      const validUrls = (urls || []).filter((_, idx) => !brokenIndices[idx]);
+      const googleImgSearchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent((city || '') + ' ' + itemName)}`;
+
+      if (validUrls.length > 0) {
+        return (
+          <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-2.5 p-3 bg-[#eef3ef] border-b border-line">
+            {(urls || []).map((url, idx) => {
+              if (brokenIndices[idx]) return null;
+              return (
+                <div key={idx} className={`snap-center shrink-0 ${validUrls.length === 1 ? 'w-full' : 'w-[86%]'} h-48 rounded-xl overflow-hidden bg-white shadow-sm relative`}>
+                  <img
+                    src={url}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                    alt={`${itemName} 照片 ${idx + 1}`}
+                    loading="lazy"
+                    onError={() => setBrokenIndices(prev => ({ ...prev, [idx]: true }))}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+
+      return (
+        <div className="w-full h-32 bg-gradient-to-br from-[#e7f0ea] to-[#dde8e1] flex flex-col items-center justify-center border-b border-line text-muted px-4 text-center">
+          <span className="text-2xl mb-1">{sourceTab === 'food' ? '🍽️' : (sourceTab === 'spot' ? '⛰️' : '🛍️')}</span>
+          <a
+            href={googleImgSearchUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-bold text-accent hover:underline bg-white/80 px-3 py-1 rounded-full border border-line shadow-sm mt-0.5"
+          >
+            🔍 點此查看「{itemName}」Google 實景圖片 ↗
+          </a>
+        </div>
+      );
+    };
+
+    // ========================================================================
+    // 🃏 元件：收藏與購物通用卡片
     // ========================================================================
     const CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAddToTrip }) => {
       const [isEditingNote, setIsEditingNote] = useState(false);
@@ -247,20 +341,13 @@
       return (
         <article className="editorial-card overflow-hidden flex flex-col justify-between transition-all hover:shadow-lg animate-fade-in">
           <div>
-            {item.photoUrls && item.photoUrls.length > 0 ? (
-              <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-2 p-3 bg-[#eef3ef] border-b border-line">
-                {item.photoUrls.map((url, idx) => (
-                  <div key={idx} className="snap-center shrink-0 w-[88%] h-44 rounded-xl overflow-hidden bg-white shadow-sm">
-                    <img src={url} referrerPolicy="no-referrer" className="w-full h-full object-cover" alt={item.name} onError={(e) => { e.target.style.display = 'none'; }} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="w-full h-28 bg-gradient-to-br from-[#e7f0ea] to-[#dde8e1] flex flex-col items-center justify-center border-b border-line text-muted">
-                <span className="text-2xl mb-1">{item.sourceTab === 'food' ? '🍽️' : (item.sourceTab === 'spot' ? '⛰️' : '🛍️')}</span>
-                <span className="text-[11px] font-medium tracking-wider">尚無實景照片</span>
-              </div>
-            )}
+            {/* 圖片輪播元件 */}
+            <PhotoCarousel
+              urls={item.photoUrls}
+              itemName={item.name}
+              city={item.city}
+              sourceTab={item.sourceTab}
+            />
 
             <div className="p-5">
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
@@ -411,7 +498,7 @@
     };
 
     // ========================================================================
-    // 🗺️ 元件：單一行程工作台 (時間軸、地圖、班機交通、分帳、匯出 PDF)
+    // 🗺️ 元件：單一行程工作台
     // ========================================================================
     const TripWorkspace = ({ trip, allSavedPlaces, onUpdateTrip, onBack, showToast }) => {
       const [subTab, setSubTab] = useState('plan');
@@ -1138,7 +1225,6 @@
         setTimeout(() => setToastMsg(''), 3500);
       };
 
-      // 安全格式化試算表資料 (加入強制 String 轉型，防止數字型態導致 .replace 或 .startsWith 崩潰)
       const formatSheetItems = (list, sourceTab) => (Array.isArray(list) ? list : []).map(item => {
         if (!item || typeof item !== 'object') return null;
         let aiSummaryData = null;
@@ -1147,18 +1233,8 @@
           try { aiSummaryData = JSON.parse(rawAiText); } catch(e) {}
         }
 
-        const rawPhotoUrls = String(item['照片網址'] || item['照片'] || '').trim();
-        let parsedPhotoUrls = [];
-        if (rawPhotoUrls.startsWith('[')) {
-          try {
-            const arr = JSON.parse(rawPhotoUrls);
-            if (Array.isArray(arr)) {
-              parsedPhotoUrls = arr.map(u => String(u || '')).filter(Boolean).map(u => u.includes('drive.google.com/uc?id=') ? u.replace('/uc?id=', '/thumbnail?id=') + '&sz=w1000' : u);
-            }
-          } catch(e) {}
-        } else if (rawPhotoUrls.startsWith('http')) {
-          parsedPhotoUrls = [rawPhotoUrls.includes('drive.google.com/uc?id=') ? rawPhotoUrls.replace('/uc?id=', '/thumbnail?id=') + '&sz=w1000' : rawPhotoUrls];
-        }
+        // 🔥 呼叫全新多重保底圖片擷取器
+        const parsedPhotoUrls = extractPhotoUrls(item);
 
         const sig = aiSummaryData?.signature ? `★必點/亮點：${aiSummaryData.signature}` : '';
         const rev = aiSummaryData?.review ? `💬摘要：${aiSummaryData.review}` : '';
@@ -1411,7 +1487,6 @@
 
       return (
         <div className="min-h-screen flex flex-col">
-          {/* 頂部雜誌感品牌列 */}
           <header className="sticky top-0 z-30 bg-paper/90 backdrop-blur-md border-b border-line px-4 py-3.5">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => { setActiveTab('home'); setActiveTripId(null); }}>
@@ -1439,10 +1514,8 @@
             </div>
           </header>
 
-          {/* 主內容區 */}
           <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-6 pb-16">
             
-            {/* 🏠 分頁 1：首頁 */}
             {activeTab === 'home' && (
               <div className="space-y-7 animate-fade-in">
                 <div className="bg-deep text-white rounded-3xl p-7 shadow-xl relative overflow-hidden">
@@ -1452,7 +1525,7 @@
                       把日常心動的每個瞬間，<br />排成下一趟好旅行。
                     </h1>
                     <p className="text-xs text-[#b4d2c7] leading-relaxed pt-1">
-                      直接將社群貼文或網址分享給 LINE，AI 會自動為你辨識所有餐廳與景點、整理必點招牌並同步至此。
+                      直接將社群貼文或網址分享給 LINE，AI 會自動為你辨識所有餐廳與景點、整理必點招牌與 Google 圖片並同步至此。
                     </p>
                     <div className="flex flex-wrap gap-2.5 pt-3">
                       <button onClick={() => setActiveTab('createTrip')} className="bg-[#e3c38f] text-deep font-bold text-xs px-4 py-2.5 rounded-xl shadow hover:opacity-95">
@@ -1584,7 +1657,6 @@
               </div>
             )}
 
-            {/* ⭐ 分頁 2：收藏 */}
             {activeTab === 'saved' && (
               <div className="space-y-5 animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
@@ -1674,7 +1746,6 @@
               </div>
             )}
 
-            {/* ➕ 分頁 3：建立新行程 */}
             {activeTab === 'createTrip' && (
               <div className="max-w-2xl mx-auto animate-fade-in">
                 <form onSubmit={handleCreateNewTrip} className="editorial-card p-6 sm:p-8 space-y-5">
@@ -1788,7 +1859,6 @@
               </div>
             )}
 
-            {/* 🗓️ 分頁 4：行程 */}
             {activeTab === 'trips' && (
               <div className="animate-fade-in">
                 {activeTripObj ? (
@@ -1868,7 +1938,6 @@
               </div>
             )}
 
-            {/* 🛍️ 分頁 5：購物 */}
             {activeTab === 'shop' && (
               <div className="space-y-5 animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
@@ -1911,7 +1980,6 @@
 
           </main>
 
-          {/* 網頁端直接貼文/網址 AI 匯入視窗 */}
           {showImportModal && (
             <div className="fixed inset-0 bg-deep/60 z-50 flex items-center justify-center p-4">
               <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
@@ -1920,7 +1988,7 @@
                   <button onClick={() => setShowImportModal(false)} className="text-muted">✕</button>
                 </div>
                 <p className="text-xs text-muted leading-relaxed">
-                  除了直接分享給 LINE 機器人之外，你也可以在這裡貼上 Threads / 小紅書網址或整篇美食旅遊貼文，後端 Gemini AI 會自動擷取裡面所有的餐廳與景點並寫入雲端試算表！
+                  除了直接分享給 LINE 機器人之外，你也可以在這裡貼上 Threads / 小紅書網址或整篇美食旅遊貼文，後端 Gemini AI 會自動擷取裡面所有的餐廳與景點、查好 Google 圖片並寫入雲端試算表！
                 </p>
                 <textarea
                   rows="5"
@@ -1936,21 +2004,19 @@
                     disabled={isImporting}
                     className="px-5 py-2.5 rounded-xl text-xs font-bold bg-accent text-white disabled:opacity-50"
                   >
-                    {isImporting ? '🤖 AI 正在辨識並查詢地圖中...' : '開始 AI 辨識收錄'}
+                    {isImporting ? '🤖 AI 正在辨識並抓取 Google 照片中...' : '開始 AI 辨識收錄'}
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* 底部通知 Toast */}
           {toastMsg && (
             <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-deep text-white text-xs font-bold px-5 py-3 rounded-2xl shadow-xl border border-white/15 animate-fade-in">
               {toastMsg}
             </div>
           )}
 
-          {/* 🧭 底部 5 格固定導覽列 */}
           <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-line shadow-[0_-8px_30px_rgba(16,45,50,0.06)] px-2 py-1.5 pb-[calc(6px+env(safe-area-inset-bottom))]">
             <div className="max-w-md mx-auto grid grid-cols-5 items-center gap-1">
               <button
