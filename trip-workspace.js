@@ -26,6 +26,7 @@ window.TripWorkspace = ({ trip, allSavedPlaces, onUpdateTrip, onBack, showToast 
   const dateOf = (d) => {
     try {
       const z = new Date(`${trip.start}T12:00:00`);
+      
       z.setDate(z.getDate() + d - 1);
       return z.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', weekday: 'short' });
     } catch (e) { return `Day ${d}`; }
