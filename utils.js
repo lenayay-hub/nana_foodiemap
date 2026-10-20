@@ -26,7 +26,7 @@ window.categoriesData = {
   ]
 };
 
-// 🔥 全方位智慧解析 Google 試算表圖片網址
+// 🔥 全方位智慧解析 Google 試算表圖片網址（優化尺寸為 w600 保護手機記憶體）
 window.extractPhotoUrls = function(item) {
   let raw = item['照片網址'] || item['照片'] || item['圖片網址'] || item['圖片'] || '';
   
@@ -60,7 +60,7 @@ window.extractPhotoUrls = function(item) {
   return urls
     .map(u => String(u || '').trim())
     .filter(u => u.startsWith('http'))
-    .map(u => u.includes('drive.google.com/uc?id=') ? u.replace('/uc?id=', '/thumbnail?id=') + '&sz=w1000' : u);
+    .map(u => u.includes('drive.google.com/uc?id=') ? u.replace('/uc?id=', '/thumbnail?id=') + '&sz=w600' : u);
 };
 
 // 🕒 營業時間判斷工具
@@ -138,9 +138,9 @@ window.printHtmlDocument = function(title, bodyHtml) {
   win.document.close();
 };
 
-// 🗂️ 格式化試算表資料並將 AI 總結自動寫入備註
+// 🗂️ 格式化試算表資料並將 AI 總結自動寫入備註（加入唯一 uid 防呆）
 window.formatSheetItems = function(list, sourceTab) {
-  return (Array.isArray(list) ? list : []).map(item => {
+  return (Array.isArray(list) ? list : []).map((item, idx) => {
     if (!item || typeof item !== 'object') return null;
     let aiSummaryData = null;
     const rawAiText = String(item['AI總結'] || '').trim();
@@ -154,10 +154,11 @@ window.formatSheetItems = function(list, sourceTab) {
     const note = String(item['個人註解'] || '');
     const combinedNote = [sig, rev, note].filter(Boolean).join(' ｜ ');
     const nameStr = String(item['店名'] || item['景點名稱'] || item['商品名稱'] || '未命名項目').trim();
+    const safeId = item.id !== undefined && item.id !== '' ? item.id : `row_${idx}`;
 
     return {
-      uid: `${sourceTab}_${item.id}`,
-      id: item.id,
+      uid: `${sourceTab}_${safeId}_${idx}`,
+      id: safeId,
       sourceTab,
       name: nameStr,
       city: String(item['縣市'] || '').replace(/臺/g, '台').trim(),
@@ -178,4 +179,3 @@ window.formatSheetItems = function(list, sourceTab) {
     };
   }).filter(x => x && x.name && x.name !== '未命名項目');
 };
-
