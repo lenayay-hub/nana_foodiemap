@@ -1,6 +1,8 @@
 <!-- ==========================================================================
      檔案名稱：index.html (主入口與 5 大分頁導覽列)
-     依賴檔案：styles.css, utils.js, components.js, trip-workspace.js
+     修復重點：
+     1. 修正收藏頁「全部分類」下拉選單重複 "其他" key 造成的渲染崩潰。
+     2. 加入 bootApp 守門員機制，確保 components.js 與 trip-workspace.js 載入完畢後才渲染。
      ========================================================================== -->
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -47,12 +49,11 @@
     };
   </script>
 
-  <!-- 載入外部獨立樣式表 -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="antialiased selection:bg-accent selection:text-white pb-24">
   
-  <!-- 🌟 獨立的優雅啟動畫面 (蓋在最上層，防止重新整理閃白屏) -->
+  <!-- 獨立的優雅啟動畫面 -->
   <div id="splash-screen" style="position: fixed; inset: 0; z-index: 99999; background: #f6f8f3; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.45s ease-out;">
     <div class="splash-logo" style="width: 52px; height: 52px; border-radius: 16px; background: #102d32; color: #e1bc83; display: grid; place-items: center; font-size: 26px; font-weight: bold; margin-bottom: 14px; box-shadow: 0 10px 25px rgba(16,45,50,0.15);">✧</div>
     <div style="font-weight: 700; font-size: 17px; color: #102d32; font-family: 'Noto Serif TC', serif; letter-spacing: 0.02em;">Nana's Life & Travel</div>
@@ -62,7 +63,7 @@
   <!-- React 渲染容器 -->
   <div id="root"></div>
 
-  <!-- 1. 載入原生高速工具庫 (不需 Babel 編譯) -->
+  <!-- 1. 載入原生高速工具庫 -->
   <script src="utils.js"></script>
 
   <!-- 2. 載入拆分後的 React 元件模組 -->
@@ -150,7 +151,6 @@
       };
 
       useEffect(() => {
-        // 先載入本機快取讓畫面瞬間準備好，再與雲端同步
         try {
           const local = JSON.parse(localStorage.getItem(window.LOCAL_TRIPS_KEY) || '[]');
           if (Array.isArray(local) && local.length > 0) setTrips(local);
@@ -169,17 +169,18 @@
         } catch (e) {}
       };
 
-      const allSavedPlaces = useMemo(() => [...db.food, ...db.spot], [db.food, db.spot]);
+      const allSavedPlaces = useMemo(() => [...(db.food || []), ...(db.spot || [])], [db.food, db.spot]);
 
       const filteredSavedPlaces = useMemo(() => {
         return allSavedPlaces.filter(item => {
+          if (!item) return false;
           if (savedFilterType !== 'all' && item.sourceTab !== savedFilterType) return false;
           if (selectedCity && item.city !== selectedCity) return false;
           if (selectedCategory && item.foodType !== selectedCategory) return false;
           if (onlyOpenNow && item.isOpenNow !== true) return false;
           if (searchKeyword) {
             const kw = searchKeyword.toLowerCase();
-            const text = `${item.name} ${item.city} ${item.district} ${item.address} ${item.combinedNote}`.toLowerCase();
+            const text = `${item.name || ''} ${item.city || ''} ${item.district || ''} ${item.address || ''} ${item.combinedNote || ''}`.toLowerCase();
             if (!text.includes(kw)) return false;
           }
           return true;
@@ -187,8 +188,22 @@
       }, [allSavedPlaces, savedFilterType, selectedCity, selectedCategory, onlyOpenNow, searchKeyword]);
 
       const availableCities = useMemo(() => {
-        return [...new Set(allSavedPlaces.map(x => x.city).filter(c => c && !c.includes('未知')))].sort();
+        return [...new Set(allSavedPlaces.map(x => x?.city).filter(c => c && !c.includes('未知')))].sort();
       }, [allSavedPlaces]);
+
+      // 🔥 修正：自動去除重複的分類名稱（例如美食與景點都有「其他」），避免 React Key 衝突
+      const currentCategoryOptions = useMemo(() => {
+        const catObj = window.categoriesData || { food: [], spot: [], shop: [] };
+        const rawList = savedFilterType === 'spot'
+          ? (catObj.spot || [])
+          : (savedFilterType === 'food' ? (catObj.food || []) : [...(catObj.food || []), ...(catObj.spot || [])]);
+        const seen = new Set();
+        return rawList.filter(c => {
+          if (!c || seen.has(c.name)) return false;
+          seen.add(c.name);
+          return true;
+        });
+      }, [savedFilterType]);
 
       const handleUpdateNote = async (sourceTab, id, newNote) => {
         const tabName = sourceTab === 'food' ? 'Food' : (sourceTab === 'spot' ? 'Spot' : 'Shop');
@@ -342,6 +357,8 @@
       };
 
       const activeTripObj = useMemo(() => trips.find(t => t.id === activeTripId), [trips, activeTripId]);
+      const CardComp = window.CollectionCard;
+      const TripComp = window.TripWorkspace;
 
       return (
         <div className="min-h-screen flex flex-col">
@@ -500,8 +517,8 @@
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {allSavedPlaces.slice(0, 3).map(item => (
-                        <window.CollectionCard
+                      {CardComp && allSavedPlaces.slice(0, 3).map(item => (
+                        <CardComp
                           key={item.uid}
                           item={item}
                           onUpdateNote={handleUpdateNote}
@@ -569,8 +586,8 @@
                       className="w-full bg-paper border border-line rounded-xl px-3 py-2.5 text-xs text-ink font-semibold"
                     >
                       <option value="">🏷️ 全部分類</option>
-                      {(savedFilterType === 'spot' ? window.categoriesData.spot : (savedFilterType === 'food' ? window.categoriesData.food : [...window.categoriesData.food, ...window.categoriesData.spot])).map(c => (
-                        <option key={c.name} value={c.name}>{c.name} {c.emoji}</option>
+                      {currentCategoryOptions.map((c, idx) => (
+                        <option key={`${c.name}_${idx}`} value={c.name}>{c.name} {c.emoji}</option>
                       ))}
                     </select>
                   </div>
@@ -591,8 +608,8 @@
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {filteredSavedPlaces.map(item => (
-                      <window.CollectionCard
+                    {CardComp && filteredSavedPlaces.map(item => (
+                      <CardComp
                         key={item.uid}
                         item={item}
                         onUpdateNote={handleUpdateNote}
@@ -723,8 +740,8 @@
             {/* 🗓️ 分頁 4：行程 */}
             {activeTab === 'trips' && (
               <div className="animate-fade-in">
-                {activeTripObj ? (
-                  <window.TripWorkspace
+                {activeTripObj && TripComp ? (
+                  <TripComp
                     trip={activeTripObj}
                     allSavedPlaces={allSavedPlaces}
                     onUpdateTrip={(updated) => {
@@ -815,7 +832,9 @@
                     className="bg-white border border-line rounded-xl px-3.5 py-2.5 text-xs text-ink font-bold self-start"
                   >
                     <option value="">📦 全部商品分類 ({db.shop.length})</option>
-                    {window.categoriesData.shop.map(c => <option key={c.name} value={c.name}>{c.name} {c.emoji}</option>)}
+                    {((window.categoriesData && window.categoriesData.shop) || []).map((c, idx) => (
+                      <option key={`${c.name}_${idx}`} value={c.name}>{c.name} {c.emoji}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -825,10 +844,10 @@
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {db.shop
+                    {CardComp && db.shop
                       .filter(x => !shopCategory || x.foodType === shopCategory)
                       .map(item => (
-                        <window.CollectionCard
+                        <CardComp
                           key={item.uid}
                           item={item}
                           onUpdateNote={handleUpdateNote}
@@ -929,8 +948,20 @@
       );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    // 🔥 模組載入守門員：確保外部 components.js 與 trip-workspace.js 都編譯完成後才啟動 App
+    function bootApp(retries = 40) {
+      if (window.CollectionCard && window.TripWorkspace) {
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+      } else if (retries > 0) {
+        setTimeout(() => bootApp(retries - 1), 50);
+      } else {
+        // 萬一外部檔案沒讀到，依然強制啟動並顯示提示
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+      }
+    }
+    bootApp();
   </script>
 </body>
 </html>
