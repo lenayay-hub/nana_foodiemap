@@ -1,0 +1,63 @@
+/* ==========================================================================
+   檔案名稱：styles.css
+   功能：森林奶油雜誌風全域樣式、卡片陰影與過渡動畫
+   ========================================================================== */
+
+body {
+  background-color: #f6f8f3;
+  color: #17353a;
+  font-family: 'DM Sans', 'Noto Sans TC', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  margin: 0;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.editorial-card {
+  background: #ffffff;
+  border: 1px solid #e2e9e4;
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(16, 45, 50, 0.05);
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseLogo {
+  0%, 100% {
+    transform: rotate(-6deg) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: rotate(-6deg) scale(0.92);
+    opacity: 0.85;
+  }
+}
+
+.splash-logo {
+  animation: pulseLogo 1.6s infinite ease-in-out;
+}
+
+.leaflet-container {
+  font-family: inherit;
+  z-index: 10;
+}
