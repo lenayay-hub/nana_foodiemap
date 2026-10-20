@@ -178,3 +178,4 @@ window.formatSheetItems = function(list, sourceTab) {
     };
   }).filter(x => x && x.name && x.name !== '未命名項目');
 };
+
