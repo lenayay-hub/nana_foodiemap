@@ -56,7 +56,6 @@ body {
 .splash-logo {
   animation: pulseLogo 1.6s infinite ease-in-out;
 }
-
 .leaflet-container {
   font-family: inherit;
   z-index: 10;
