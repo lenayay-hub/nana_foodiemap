@@ -1,6 +1,8 @@
 // ==========================================================================
 // 檔案名稱：components.js
-// 修復重點：加入完整資料防呆，確保任何空值都不會導致收藏頁打不開
+// 修復重點：
+// 1. 修正 React Hooks 呼叫順序（解決手機版切換分頁時 Hook 順序錯誤崩潰）
+// 2. 圖片加上 decoding="async" 與數量上限，防止手機 Safari 記憶體爆表閃退
 // ==========================================================================
 
 const { useState, useEffect, useMemo } = React;
@@ -12,7 +14,11 @@ window.PhotoCarousel = ({ urls, itemName, city, sourceTab }) => {
     setBrokenIndices({});
   }, [urls]);
 
-  const safeUrls = Array.isArray(urls) ? urls : [];
+  // 限制單張卡片最多渲染 4 張照片，避免手機橫向捲軸一次解碼過多圖片導致閃退
+  const safeUrls = useMemo(() => {
+    return Array.isArray(urls) ? urls.slice(0, 4) : [];
+  }, [urls]);
+
   const validUrls = safeUrls.filter((_, idx) => !brokenIndices[idx]);
   const googleImgSearchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent((city || '') + ' ' + (itemName || ''))}`;
 
@@ -29,6 +35,7 @@ window.PhotoCarousel = ({ urls, itemName, city, sourceTab }) => {
                 className="w-full h-full object-cover"
                 alt={`${itemName || '項目'} 照片 ${idx + 1}`}
                 loading="lazy"
+                decoding="async"
                 onError={() => setBrokenIndices(prev => ({ ...prev, [idx]: true }))}
               />
             </div>
@@ -54,17 +61,35 @@ window.PhotoCarousel = ({ urls, itemName, city, sourceTab }) => {
 };
 
 window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAddToTrip }) => {
-  if (!item) return null;
-
+  // 🔥 所有 React Hooks 必須在最頂層執行，絕對不能放在 if (!item) 之後！
   const [isEditingNote, setIsEditingNote] = useState(false);
-  const [noteContent, setNoteContent] = useState(item.personalNote || '');
+  const [noteContent, setNoteContent] = useState(item?.personalNote || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isEditingCat, setIsEditingCat] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    setNoteContent(item.personalNote || '');
-  }, [item.personalNote]);
+    setNoteContent(item?.personalNote || '');
+  }, [item?.personalNote]);
+
+  const aiSummaryNote = useMemo(() => {
+    if (!item || !item.aiData) return '';
+    if (typeof item.aiData !== 'object') return String(item.aiData);
+    const parts = [];
+    if (item.aiData.signature && typeof item.aiData.signature !== 'object') {
+      parts.push(`💡 ${item.sourceTab === 'food' ? '必點招牌' : (item.sourceTab === 'spot' ? '打卡亮點' : '商品用途')}：${String(item.aiData.signature)}`);
+    }
+    if (item.aiData.review && typeof item.aiData.review !== 'object') {
+      parts.push(`💬 ${item.sourceTab === 'shop' ? '網路評價' : '評論摘要'}：${String(item.aiData.review)}`);
+    }
+    if (item.aiData.reason && item.sourceTab === 'spot' && typeof item.aiData.reason !== 'object') {
+      parts.push(`📌 貼心提醒：${String(item.aiData.reason)}`);
+    }
+    return parts.join('\n');
+  }, [item]);
+
+  // Hooks 宣告完畢後，才進行空值防衛
+  if (!item) return null;
 
   let priceDisplay = '依現場為主';
   if (item.sourceTab === 'shop') {
@@ -78,16 +103,6 @@ window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAdd
     else if (num === 3) priceDisplay = '約 NT$800-1500';
     else if (num >= 4) priceDisplay = 'NT$1500+';
   }
-
-  const aiSummaryNote = useMemo(() => {
-    if (!item.aiData) return '';
-    if (typeof item.aiData !== 'object') return String(item.aiData);
-    const parts = [];
-    if (item.aiData.signature) parts.push(`💡 ${item.sourceTab === 'food' ? '必點招牌' : (item.sourceTab === 'spot' ? '打卡亮點' : '商品用途')}：${item.aiData.signature}`);
-    if (item.aiData.review) parts.push(`💬 ${item.sourceTab === 'shop' ? '網路評價' : '評論摘要'}：${item.aiData.review}`);
-    if (item.aiData.reason && item.sourceTab === 'spot') parts.push(`📌 貼心提醒：${item.aiData.reason}`);
-    return parts.join('\n');
-  }, [item.aiData, item.sourceTab]);
 
   const handleSaveNote = async () => {
     setIsSaving(true);
@@ -168,7 +183,7 @@ window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAdd
             </div>
           </div>
 
-          <h3 className="text-lg font-bold text-deep mb-2 leading-snug">{item.name}</h3>
+          <h3 className="text-lg font-bold text-deep mb-2 leading-snug">{String(item.name || '')}</h3>
 
           <div className="space-y-1 text-xs text-muted mb-3">
             <div className="flex items-center gap-3 flex-wrap">
@@ -177,10 +192,10 @@ window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAdd
               <span>💰 {priceDisplay}</span>
             </div>
             {item.sourceTab !== 'shop' && (
-              <div className="truncate">🕒 今日營業：{item.todayHoursText}</div>
+              <div className="truncate">🕒 今日營業：{String(item.todayHoursText || '依現場公告為主')}</div>
             )}
             {item.address && item.address !== '尚未提供地址' && item.sourceTab !== 'shop' && (
-              <div className="truncate text-[11px]">🗺️ {item.address}</div>
+              <div className="truncate text-[11px]">🗺️ {String(item.address)}</div>
             )}
           </div>
 
@@ -219,7 +234,7 @@ window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAdd
             ) : (
               <div onClick={() => setIsEditingNote(true)} className="text-xs text-ink/90 cursor-pointer hover:text-accent transition-colors pt-0.5">
                 {item.personalNote ? (
-                  <span className="font-medium">✍️ 筆記：{item.personalNote}</span>
+                  <span className="font-medium">✍️ 筆記：{String(item.personalNote)}</span>
                 ) : (
                   <span className="text-muted italic">＋ 點此新增個人筆記或補充說明...</span>
                 )}
