@@ -2,7 +2,8 @@
      檔案名稱：index.html (主入口與 5 大分頁導覽列)
      修復重點：
      1. 修正收藏頁「全部分類」下拉選單重複 "其他" key 造成的渲染崩潰。
-     2. 加入 bootApp 守門員機制，確保 components.js 與 trip-workspace.js 載入完畢後才渲染。
+     2. 加入手機版收藏頁分批載入（每次 12 筆），徹底解決手機記憶體爆表閃退。
+     3. 優化 bootApp 守門員機制，不因 trip-workspace.js 卡住首頁與收藏頁。
      ========================================================================== -->
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -88,6 +89,8 @@
       const [searchKeyword, setSearchKeyword] = useState('');
       const [onlyOpenNow, setOnlyOpenNow] = useState(false);
       const [shopCategory, setShopCategory] = useState('');
+      // 🔥 控制手機版收藏頁每次顯示筆數，防止一次渲染上百張圖片閃退
+      const [visibleCount, setVisibleCount] = useState(12);
 
       const [newTripTitle, setNewTripTitle] = useState('');
       const [newTripStart, setNewTripStart] = useState(new Date().toLocaleDateString('en-CA'));
@@ -100,6 +103,11 @@
       const [importText, setImportText] = useState('');
       const [isImporting, setIsImporting] = useState(false);
       const [luckyItem, setLuckyItem] = useState(null);
+
+      // 當切換篩選條件或分頁時，自動重置顯示筆數為 12 筆
+      useEffect(() => {
+        setVisibleCount(12);
+      }, [savedFilterType, selectedCity, selectedCategory, onlyOpenNow, searchKeyword, activeTab]);
 
       const showToast = (msg) => {
         setToastMsg(msg);
@@ -191,7 +199,6 @@
         return [...new Set(allSavedPlaces.map(x => x?.city).filter(c => c && !c.includes('未知')))].sort();
       }, [allSavedPlaces]);
 
-      // 🔥 修正：自動去除重複的分類名稱（例如美食與景點都有「其他」），避免 React Key 衝突
       const currentCategoryOptions = useMemo(() => {
         const catObj = window.categoriesData || { food: [], spot: [], shop: [] };
         const rawList = savedFilterType === 'spot'
@@ -533,7 +540,7 @@
               </div>
             )}
 
-            {/* ⭐ 分頁 2：收藏 */}
+            {/* ⭐ 分頁 2：收藏（加入手機版分批載入保護） */}
             {activeTab === 'saved' && (
               <div className="space-y-5 animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
@@ -607,17 +614,30 @@
                     <p className="text-xs text-muted">你可以調整篩選條件，或將社群貼文傳給 LINE 機器人自動辨識收錄！</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {CardComp && filteredSavedPlaces.map(item => (
-                      <CardComp
-                        key={item.uid}
-                        item={item}
-                        onUpdateNote={handleUpdateNote}
-                        onUpdateCategory={handleUpdateCategory}
-                        onDelete={handleDeleteItem}
-                        onAddToTrip={handleQuickAddPlaceToTrip}
-                      />
-                    ))}
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {CardComp && filteredSavedPlaces.slice(0, visibleCount).map(item => (
+                        <CardComp
+                          key={item.uid}
+                          item={item}
+                          onUpdateNote={handleUpdateNote}
+                          onUpdateCategory={handleUpdateCategory}
+                          onDelete={handleDeleteItem}
+                          onAddToTrip={handleQuickAddPlaceToTrip}
+                        />
+                      ))}
+                    </div>
+
+                    {visibleCount < filteredSavedPlaces.length && (
+                      <div className="text-center pt-2">
+                        <button
+                          onClick={() => setVisibleCount(prev => prev + 12)}
+                          className="bg-white hover:bg-soft text-deep font-bold text-xs px-6 py-3 rounded-2xl border border-line shadow-sm transition-colors"
+                        >
+                          👇 載入更多收藏（目前顯示 {visibleCount} / 共 {filteredSavedPlaces.length} 筆）
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -948,15 +968,14 @@
       );
     }
 
-    // 🔥 模組載入守門員：確保外部 components.js 與 trip-workspace.js 都編譯完成後才啟動 App
-    function bootApp(retries = 40) {
-      if (window.CollectionCard && window.TripWorkspace) {
+    // 🔥 模組載入守門員：只要 CollectionCard 編譯完成即可啟動，避免 trip-workspace.js 延遲影響收藏頁
+    function bootApp(retries = 60) {
+      if (window.CollectionCard) {
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
       } else if (retries > 0) {
         setTimeout(() => bootApp(retries - 1), 50);
       } else {
-        // 萬一外部檔案沒讀到，依然強制啟動並顯示提示
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
       }
