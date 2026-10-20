@@ -1,11 +1,10 @@
 // ==========================================================================
 // 檔案名稱：components.js
-// 功能：智慧圖片輪播區 (PhotoCarousel) 與 收藏/購物通用卡片 (CollectionCard)
+// 修復重點：加入完整資料防呆，確保任何空值都不會導致收藏頁打不開
 // ==========================================================================
 
 const { useState, useEffect, useMemo } = React;
 
-// 🖼️ 獨立元件：智慧照片輪播區 (處理 Google 圖片顯示與過期失效備援)
 window.PhotoCarousel = ({ urls, itemName, city, sourceTab }) => {
   const [brokenIndices, setBrokenIndices] = useState({});
 
@@ -13,13 +12,14 @@ window.PhotoCarousel = ({ urls, itemName, city, sourceTab }) => {
     setBrokenIndices({});
   }, [urls]);
 
-  const validUrls = (urls || []).filter((_, idx) => !brokenIndices[idx]);
-  const googleImgSearchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent((city || '') + ' ' + itemName)}`;
+  const safeUrls = Array.isArray(urls) ? urls : [];
+  const validUrls = safeUrls.filter((_, idx) => !brokenIndices[idx]);
+  const googleImgSearchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent((city || '') + ' ' + (itemName || ''))}`;
 
   if (validUrls.length > 0) {
     return (
       <div className="w-full flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-2.5 p-3 bg-[#eef3ef] border-b border-line">
-        {(urls || []).map((url, idx) => {
+        {safeUrls.map((url, idx) => {
           if (brokenIndices[idx]) return null;
           return (
             <div key={idx} className={`snap-center shrink-0 ${validUrls.length === 1 ? 'w-full' : 'w-[86%]'} h-48 rounded-xl overflow-hidden bg-white shadow-sm relative`}>
@@ -27,7 +27,7 @@ window.PhotoCarousel = ({ urls, itemName, city, sourceTab }) => {
                 src={url}
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
-                alt={`${itemName} 照片 ${idx + 1}`}
+                alt={`${itemName || '項目'} 照片 ${idx + 1}`}
                 loading="lazy"
                 onError={() => setBrokenIndices(prev => ({ ...prev, [idx]: true }))}
               />
@@ -47,19 +47,24 @@ window.PhotoCarousel = ({ urls, itemName, city, sourceTab }) => {
         rel="noopener noreferrer"
         className="text-[11px] font-bold text-accent hover:underline bg-white/80 px-3 py-1 rounded-full border border-line shadow-sm mt-0.5"
       >
-        🔍 點此查看「{itemName}」Google 實景圖片 ↗
+        🔍 點此查看「{itemName || '地點'}」Google 實景圖片 ↗
       </a>
     </div>
   );
 };
 
-// 🃏 元件：收藏與購物通用卡片 (整合 AI 總結至備註欄)
 window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAddToTrip }) => {
+  if (!item) return null;
+
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [noteContent, setNoteContent] = useState(item.personalNote || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isEditingCat, setIsEditingCat] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  useEffect(() => {
+    setNoteContent(item.personalNote || '');
+  }, [item.personalNote]);
 
   let priceDisplay = '依現場為主';
   if (item.sourceTab === 'shop') {
@@ -86,21 +91,22 @@ window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAdd
 
   const handleSaveNote = async () => {
     setIsSaving(true);
-    await onUpdateNote(item.sourceTab, item.id, noteContent);
+    if (onUpdateNote) await onUpdateNote(item.sourceTab, item.id, noteContent);
     setIsSaving(false);
     setIsEditingNote(false);
   };
 
   const handleSaveCat = async (newCat) => {
     setIsEditingCat(false);
-    await onUpdateCategory(item.sourceTab, item.id, newCat);
+    if (onUpdateCategory) await onUpdateCategory(item.sourceTab, item.id, newCat);
   };
 
   const badgeColor = item.sourceTab === 'food' 
     ? 'bg-amber-100 text-amber-800 border-amber-200' 
     : (item.sourceTab === 'spot' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-teal-100 text-teal-800 border-teal-200');
 
-  const catList = window.categoriesData[item.sourceTab] || window.categoriesData.food;
+  const catObj = window.categoriesData || { food: [], spot: [], shop: [] };
+  const catList = catObj[item.sourceTab] || catObj.food || [];
 
   return (
     <article className="editorial-card overflow-hidden flex flex-col justify-between transition-all hover:shadow-lg animate-fade-in">
@@ -127,11 +133,11 @@ window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAdd
                   onBlur={() => setIsEditingCat(false)}
                   autoFocus
                 >
-                  {catList.map(c => <option key={c.name} value={c.name}>{c.name} {c.emoji}</option>)}
+                  {catList.map((c, idx) => <option key={`${c.name}_${idx}`} value={c.name}>{c.name} {c.emoji}</option>)}
                 </select>
               ) : (
                 <button onClick={() => setIsEditingCat(true)} className="text-xs font-semibold bg-paper hover:bg-soft text-ink px-2.5 py-0.5 rounded-full border border-line transition-colors" title="點擊更改分類">
-                  {item.foodType} ✎
+                  {item.foodType || '其他'} ✎
                 </button>
               )}
 
@@ -152,7 +158,7 @@ window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAdd
 
               {deleteConfirm ? (
                 <div className="flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded-lg border border-red-200">
-                  <button onClick={() => onDelete(item.sourceTab, item.id)} className="text-[11px] font-bold text-red-600 hover:underline">確定刪除</button>
+                  <button onClick={() => onDelete && onDelete(item.sourceTab, item.id)} className="text-[11px] font-bold text-red-600 hover:underline">確定刪除</button>
                   <span className="text-gray-300">|</span>
                   <button onClick={() => setDeleteConfirm(false)} className="text-[11px] text-gray-500">取消</button>
                 </div>
@@ -178,7 +184,6 @@ window.CollectionCard = ({ item, onUpdateNote, onUpdateCategory, onDelete, onAdd
             )}
           </div>
 
-          {/* 備註與 AI 總結整合區 */}
           <div className="bg-paper rounded-xl p-3.5 border border-line space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold uppercase tracking-wider text-accent">📋 備註與 AI 情報摘要</span>
