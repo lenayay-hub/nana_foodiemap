@@ -1,9 +1,9 @@
 <!-- ==========================================================================
      檔案名稱：index.html (主入口與 5 大分頁導覽列)
-     修復重點：
-     1. 修正收藏頁「全部分類」下拉選單重複 "其他" key 造成的渲染崩潰。
-     2. 加入手機版收藏頁分批載入（每次 12 筆），徹底解決手機記憶體爆表閃退。
-     3. 優化 bootApp 守門員機制，不因 trip-workspace.js 卡住首頁與收藏頁。
+     升級重點：
+     1. 串接新版 TripWorkspace：支援從行程點擊景點直接跳轉至「⭐ 收藏」分頁並定位該景點。
+     2. 預載 html2canvas 支援「一鍵匯出漂亮行程表長圖 (PNG)」與精美 PDF 列印。
+     3. 保留手機版收藏頁分批載入（每次 12 筆）與 bootApp 守門員機制。
      ========================================================================== -->
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -19,6 +19,9 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- 匯出漂亮行程表長圖 (PNG) 套件 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin=""></script>
 
   <!-- Tailwind CSS & React 18 -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -89,7 +92,6 @@
       const [searchKeyword, setSearchKeyword] = useState('');
       const [onlyOpenNow, setOnlyOpenNow] = useState(false);
       const [shopCategory, setShopCategory] = useState('');
-      // 🔥 控制手機版收藏頁每次顯示筆數，防止一次渲染上百張圖片閃退
       const [visibleCount, setVisibleCount] = useState(12);
 
       const [newTripTitle, setNewTripTitle] = useState('');
@@ -104,7 +106,6 @@
       const [isImporting, setIsImporting] = useState(false);
       const [luckyItem, setLuckyItem] = useState(null);
 
-      // 當切換篩選條件或分頁時，自動重置顯示筆數為 12 筆
       useEffect(() => {
         setVisibleCount(12);
       }, [savedFilterType, selectedCity, selectedCategory, onlyOpenNow, searchKeyword, activeTab]);
@@ -248,6 +249,23 @@
         } catch (e) {}
       };
 
+      // 🔥 新增：在行程工作台直接點擊景點名稱時，跳轉到「⭐ 收藏」分頁並定位該筆收藏
+      const handleJumpToSavedPlace = (placeName, savedUid) => {
+        const matched = allSavedPlaces.find(p => (savedUid && p.uid === savedUid) || p.name === placeName);
+        setSavedFilterType('all');
+        setSelectedCity('');
+        setSelectedCategory('');
+        setOnlyOpenNow(false);
+        setSearchKeyword(matched ? matched.name : (placeName || ''));
+        setActiveTab('saved');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (matched) {
+          showToast(`⭐ 已為你跳轉至「${matched.name}」的收藏卡片！`);
+        } else {
+          showToast(`🔍 已切換至收藏庫搜尋「${placeName}」`);
+        }
+      };
+
       const handleCreateNewTrip = (e) => {
         e.preventDefault();
         if (!newTripTitle.trim()) return showToast('請輸入旅程名稱');
@@ -262,11 +280,14 @@
           const pid = 'p_' + Date.now() + '_' + idx;
           tripPlaces.push({
             id: pid,
+            savedUid: col.uid,
             name: col.name,
+            category: col.sourceTab === 'food' ? 'food' : 'spot',
             city: col.city || '',
             address: col.address || '',
             url: col.mapUrl || '',
             note: col.combinedNote || '',
+            cost: 0,
             lat: coords.lat,
             lng: coords.lng
           });
@@ -276,7 +297,11 @@
             kind: 'place',
             placeId: pid,
             day: 1,
-            time: hour
+            time: hour,
+            category: col.sourceTab === 'food' ? 'food' : 'spot',
+            note: col.combinedNote || '',
+            cost: 0,
+            transitToNext: { mode: 'taxi', duration: '車程約 15 分鐘', cost: 0, note: '' }
           });
         });
 
@@ -286,6 +311,7 @@
           start: newTripStart,
           days: Number(newTripDays) || 3,
           day: 1,
+          dayTitles: { 1: 'Day 1 精彩啟程' },
           members: members.length ? members : ['我'],
           rates: { TWD: 1, JPY: 0.215, USD: 32.1, KRW: 0.024, EUR: 35 },
           places: tripPlaces,
@@ -312,13 +338,17 @@
         const targetTrip = trips[0];
         const coords = window.parseCoordsFromUrl(colItem.mapUrl);
         const pid = 'p_' + Date.now();
+        const cat = colItem.sourceTab === 'food' ? 'food' : 'spot';
         const newPlace = {
           id: pid,
+          savedUid: colItem.uid,
           name: colItem.name,
+          category: cat,
           city: colItem.city || '',
           address: colItem.address || '',
           url: colItem.mapUrl || '',
           note: colItem.combinedNote || '',
+          cost: 0,
           lat: coords.lat,
           lng: coords.lng
         };
@@ -327,7 +357,11 @@
           kind: 'place',
           placeId: pid,
           day: 1,
-          time: '12:00'
+          time: '12:00',
+          category: cat,
+          note: colItem.combinedNote || '',
+          cost: 0,
+          transitToNext: { mode: 'taxi', duration: '車程約 15 分鐘', cost: 0, note: '' }
         };
         const updatedTrip = {
           ...targetTrip,
@@ -457,7 +491,7 @@
                               onClick={() => { setActiveTripId(trips[0].id); setActiveTab('trips'); }}
                               className="bg-deep text-white text-xs font-bold px-4 py-2 rounded-xl"
                             >
-                              進入行程工作台 & 匯出 PDF →
+                              進入行程工作台 & 匯出漂亮行程表 →
                             </button>
                           </div>
                         </div>
@@ -540,7 +574,7 @@
               </div>
             )}
 
-            {/* ⭐ 分頁 2：收藏（加入手機版分批載入保護） */}
+            {/* ⭐ 分頁 2：收藏 */}
             {activeTab === 'saved' && (
               <div className="space-y-5 animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
@@ -567,14 +601,23 @@
                 </div>
 
                 <div className="editorial-card p-4 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                  <div className="sm:col-span-5">
+                  <div className="sm:col-span-5 relative">
                     <input
                       type="text"
                       placeholder="🔍 搜尋店名、景點、地址或必點招牌備註..."
                       value={searchKeyword}
                       onChange={e => setSearchKeyword(e.target.value)}
-                      className="w-full bg-paper border border-line rounded-xl px-3.5 py-2.5 text-xs text-ink"
+                      className="w-full bg-paper border border-line rounded-xl px-3.5 py-2.5 text-xs text-ink pr-8"
                     />
+                    {searchKeyword && (
+                      <button
+                        onClick={() => setSearchKeyword('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted hover:text-deep font-bold"
+                        title="清除搜尋"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                   <div className="sm:col-span-3">
                     <select
@@ -612,6 +655,11 @@
                   <div className="editorial-card p-12 text-center space-y-3">
                     <p className="text-sm font-bold text-deep">沒有找到符合條件的收藏地點</p>
                     <p className="text-xs text-muted">你可以調整篩選條件，或將社群貼文傳給 LINE 機器人自動辨識收錄！</p>
+                    {searchKeyword && (
+                      <button onClick={() => setSearchKeyword('')} className="bg-deep text-white text-xs font-bold px-4 py-2 rounded-xl">
+                        顯示全部收藏
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-6">
@@ -769,6 +817,7 @@
                       syncTripsToCloud(next);
                     }}
                     onBack={() => setActiveTripId(null)}
+                    onJumpToSaved={handleJumpToSavedPlace}
                     showToast={showToast}
                   />
                 ) : (
@@ -777,7 +826,7 @@
                       <div>
                         <p className="text-[11px] font-bold uppercase tracking-widest text-accent">MY TRAVEL ITINERARIES</p>
                         <h1 className="text-2xl font-serif font-bold text-deep mt-0.5">🗓️ 娜娜的旅程規劃簿</h1>
-                        <p className="text-xs text-muted mt-1">所有行程皆自動同步備份於 Google 試算表，點入即可編輯時間軸、分帳與匯出 PDF。</p>
+                        <p className="text-xs text-muted mt-1">所有行程皆自動同步備份於 Google 試算表，點入即可編輯時間軸、航班、交通與一鍵匯出漂亮行程表。</p>
                       </div>
                       <button onClick={() => setActiveTab('createTrip')} className="bg-accent text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow">
                         ➕ 新增一趟旅程
@@ -795,7 +844,9 @@
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {trips.map(t => {
-                          const cost = (t.expenses || []).reduce((a, e) => a + Number(e.twd || 0), 0);
+                          const evCost = (t.events || []).reduce((acc, ev) => acc + (Number(ev.cost) || 0) + (Number(ev.transitToNext?.cost) || 0), 0);
+                          const expCost = (t.expenses || []).reduce((a, e) => a + Number(e.twd || 0), 0);
+                          const totalCost = evCost + expCost;
                           return (
                             <div key={t.id} className="editorial-card p-5 flex flex-col justify-between space-y-4 hover:border-accent transition-colors">
                               <div>
@@ -815,7 +866,7 @@
                                 </div>
                                 <h3 className="text-xl font-serif font-bold text-deep">{t.title}</h3>
                                 <p className="text-xs text-muted mt-1">
-                                  📍 {(t.places || []).length} 個收藏景點 · 🗓️ {(t.events || []).length} 個排程項目 · 💰 總支出 NT$ {cost.toLocaleString()}
+                                  📍 {(t.places || []).length} 個地點 · 🗓️ {(t.events || []).length} 個排程項目 · 💰 預估總花費 NT$ {totalCost.toLocaleString()}
                                 </p>
                               </div>
                               <div className="flex items-center justify-between pt-3 border-t border-line">
@@ -824,7 +875,7 @@
                                   onClick={() => setActiveTripId(t.id)}
                                   className="bg-deep hover:bg-accent text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors"
                                 >
-                                  打開行程 & PDF →
+                                  打開行程 & 匯出 →
                                 </button>
                               </div>
                             </div>
@@ -968,7 +1019,1042 @@
       );
     }
 
-    // 🔥 模組載入守門員：只要 CollectionCard 編譯完成即可啟動，避免 trip-workspace.js 延遲影響收藏頁
+    function bootApp(retries = 60) {
+      if (window.CollectionCard) {
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+      } else if (retries > 0) {
+        setTimeout(() => bootApp(retries - 1), 50);
+      } else {
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+      }
+    }
+    bootApp();
+  </script>
+</body>
+</html>
+<!-- ==========================================================================
+     檔案名稱：index.html (主入口與 5 大分頁導覽列)
+     升級重點：
+     1. 串接新版 TripWorkspace：支援從行程點擊景點直接跳轉至「⭐ 收藏」分頁並定位該景點。
+     2. 預載 html2canvas 支援「一鍵匯出漂亮行程表長圖 (PNG)」與精美 PDF 列印。
+     3. 保留手機版收藏頁分批載入（每次 12 筆）與 bootApp 守門員機制。
+     ========================================================================== -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#102d32">
+  <title>Nana's Journal · 生活收藏與旅程規劃</title>
+  
+  <!-- 字體與 Leaflet 地圖套件 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- 匯出漂亮行程表長圖 (PNG) 套件 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin=""></script>
+
+  <!-- Tailwind CSS & React 18 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            paper: '#f6f8f3',
+            ink: '#17353a',
+            deep: '#102d32',
+            muted: '#6e8085',
+            line: '#e2e9e4',
+            accent: '#167568',
+            soft: '#e7f3ee',
+            gold: '#ca9858',
+            cream: '#fbfcf9'
+          },
+          fontFamily: {
+            sans: ['"DM Sans"', '"Noto Sans TC"', 'sans-serif'],
+            serif: ['"Noto Serif TC"', 'serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="antialiased selection:bg-accent selection:text-white pb-24">
+  
+  <!-- 獨立的優雅啟動畫面 -->
+  <div id="splash-screen" style="position: fixed; inset: 0; z-index: 99999; background: #f6f8f3; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.45s ease-out;">
+    <div class="splash-logo" style="width: 52px; height: 52px; border-radius: 16px; background: #102d32; color: #e1bc83; display: grid; place-items: center; font-size: 26px; font-weight: bold; margin-bottom: 14px; box-shadow: 0 10px 25px rgba(16,45,50,0.15);">✧</div>
+    <div style="font-weight: 700; font-size: 17px; color: #102d32; font-family: 'Noto Serif TC', serif; letter-spacing: 0.02em;">Nana's Life & Travel</div>
+    <div style="font-size: 12px; color: #6e8085; margin-top: 6px; font-family: sans-serif;">正在準備你的森林生活圖鑑與旅程...</div>
+  </div>
+
+  <!-- React 渲染容器 -->
+  <div id="root"></div>
+
+  <!-- 1. 載入原生高速工具庫 -->
+  <script src="utils.js"></script>
+
+  <!-- 2. 載入拆分後的 React 元件模組 -->
+  <script type="text/babel" src="components.js"></script>
+  <script type="text/babel" src="trip-workspace.js"></script>
+
+  <!-- 3. 主應用程式邏輯 -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('home');
+      const [db, setDb] = useState({ food: [], spot: [], shop: [] });
+      const [trips, setTrips] = useState([]);
+      const [activeTripId, setActiveTripId] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+      const [toastMsg, setToastMsg] = useState('');
+
+      const [savedFilterType, setSavedFilterType] = useState('all');
+      const [selectedCity, setSelectedCity] = useState('');
+      const [selectedCategory, setSelectedCategory] = useState('');
+      const [searchKeyword, setSearchKeyword] = useState('');
+      const [onlyOpenNow, setOnlyOpenNow] = useState(false);
+      const [shopCategory, setShopCategory] = useState('');
+      const [visibleCount, setVisibleCount] = useState(12);
+
+      const [newTripTitle, setNewTripTitle] = useState('');
+      const [newTripStart, setNewTripStart] = useState(new Date().toLocaleDateString('en-CA'));
+      const [newTripDays, setNewTripDays] = useState(3);
+      const [newTripMembers, setNewTripMembers] = useState('娜娜\n旅伴A');
+      const [newTripPickedIds, setNewTripPickedIds] = useState([]);
+      const [newTripFilter, setNewTripFilter] = useState('');
+
+      const [showImportModal, setShowImportModal] = useState(false);
+      const [importText, setImportText] = useState('');
+      const [isImporting, setIsImporting] = useState(false);
+      const [luckyItem, setLuckyItem] = useState(null);
+
+      useEffect(() => {
+        setVisibleCount(12);
+      }, [savedFilterType, selectedCity, selectedCategory, onlyOpenNow, searchKeyword, activeTab]);
+
+      const showToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(''), 3500);
+      };
+
+      const hideSplashScreen = () => {
+        setTimeout(() => {
+          const splash = document.getElementById('splash-screen');
+          if (splash) {
+            splash.style.opacity = '0';
+            setTimeout(() => splash.remove(), 450);
+          }
+        }, 120);
+      };
+
+      const loadAllData = async () => {
+        setIsLoading(true);
+        try {
+          const res = await fetch(window.GAS_API_URL);
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setDb({ food: window.formatSheetItems(data, 'food').reverse(), spot: [], shop: [] });
+          } else {
+            setDb({
+              food: window.formatSheetItems(data.food, 'food').reverse(),
+              spot: window.formatSheetItems(data.spot, 'spot').reverse(),
+              shop: window.formatSheetItems(data.shop, 'shop').reverse()
+            });
+          }
+
+          if (data && Array.isArray(data.trips) && data.trips.length > 0) {
+            setTrips(data.trips);
+            localStorage.setItem(window.LOCAL_TRIPS_KEY, JSON.stringify(data.trips));
+          } else {
+            const local = JSON.parse(localStorage.getItem(window.LOCAL_TRIPS_KEY) || '[]');
+            if (Array.isArray(local)) setTrips(local);
+          }
+        } catch (err) {
+          try {
+            const local = JSON.parse(localStorage.getItem(window.LOCAL_TRIPS_KEY) || '[]');
+            if (Array.isArray(local)) setTrips(local);
+          } catch(e) {}
+          showToast('⚠️ 已載入本機快取資料');
+        } finally {
+          setIsLoading(false);
+          hideSplashScreen();
+        }
+      };
+
+      useEffect(() => {
+        try {
+          const local = JSON.parse(localStorage.getItem(window.LOCAL_TRIPS_KEY) || '[]');
+          if (Array.isArray(local) && local.length > 0) setTrips(local);
+        } catch(e) {}
+        loadAllData();
+      }, []);
+
+      const syncTripsToCloud = async (nextTrips) => {
+        setTrips(nextTrips);
+        localStorage.setItem(window.LOCAL_TRIPS_KEY, JSON.stringify(nextTrips));
+        try {
+          await fetch(window.GAS_API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'saveTrips', trips: nextTrips })
+          });
+        } catch (e) {}
+      };
+
+      const allSavedPlaces = useMemo(() => [...(db.food || []), ...(db.spot || [])], [db.food, db.spot]);
+
+      const filteredSavedPlaces = useMemo(() => {
+        return allSavedPlaces.filter(item => {
+          if (!item) return false;
+          if (savedFilterType !== 'all' && item.sourceTab !== savedFilterType) return false;
+          if (selectedCity && item.city !== selectedCity) return false;
+          if (selectedCategory && item.foodType !== selectedCategory) return false;
+          if (onlyOpenNow && item.isOpenNow !== true) return false;
+          if (searchKeyword) {
+            const kw = searchKeyword.toLowerCase();
+            const text = `${item.name || ''} ${item.city || ''} ${item.district || ''} ${item.address || ''} ${item.combinedNote || ''}`.toLowerCase();
+            if (!text.includes(kw)) return false;
+          }
+          return true;
+        });
+      }, [allSavedPlaces, savedFilterType, selectedCity, selectedCategory, onlyOpenNow, searchKeyword]);
+
+      const availableCities = useMemo(() => {
+        return [...new Set(allSavedPlaces.map(x => x?.city).filter(c => c && !c.includes('未知')))].sort();
+      }, [allSavedPlaces]);
+
+      const currentCategoryOptions = useMemo(() => {
+        const catObj = window.categoriesData || { food: [], spot: [], shop: [] };
+        const rawList = savedFilterType === 'spot'
+          ? (catObj.spot || [])
+          : (savedFilterType === 'food' ? (catObj.food || []) : [...(catObj.food || []), ...(catObj.spot || [])]);
+        const seen = new Set();
+        return rawList.filter(c => {
+          if (!c || seen.has(c.name)) return false;
+          seen.add(c.name);
+          return true;
+        });
+      }, [savedFilterType]);
+
+      const handleUpdateNote = async (sourceTab, id, newNote) => {
+        const tabName = sourceTab === 'food' ? 'Food' : (sourceTab === 'spot' ? 'Spot' : 'Shop');
+        setDb(prev => ({
+          ...prev,
+          [sourceTab]: prev[sourceTab].map(x => x.id === id ? { ...x, personalNote: newNote } : x)
+        }));
+        try {
+          await fetch(window.GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateNote', rowId: id, note: newNote, tabName }) });
+          showToast('✅ 筆記已儲存至雲端試算表');
+        } catch (e) { showToast('儲存失敗，請檢查網路'); }
+      };
+
+      const handleUpdateCategory = async (sourceTab, id, newCat) => {
+        const tabName = sourceTab === 'food' ? 'Food' : (sourceTab === 'spot' ? 'Spot' : 'Shop');
+        setDb(prev => ({
+          ...prev,
+          [sourceTab]: prev[sourceTab].map(x => x.id === id ? { ...x, foodType: newCat } : x)
+        }));
+        try {
+          await fetch(window.GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateCategory', rowId: id, category: newCat, tabName }) });
+          showToast(`✅ 分類已更新為「${newCat}」`);
+        } catch (e) {}
+      };
+
+      const handleDeleteItem = async (sourceTab, id) => {
+        const tabName = sourceTab === 'food' ? 'Food' : (sourceTab === 'spot' ? 'Spot' : 'Shop');
+        setDb(prev => ({
+          ...prev,
+          [sourceTab]: prev[sourceTab].filter(x => x.id !== id)
+        }));
+        try {
+          await fetch(window.GAS_API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteItem', rowId: id, tabName }) });
+          showToast('🗑️ 項目已刪除');
+        } catch (e) {}
+      };
+
+      // 🔥 新增：在行程工作台直接點擊景點名稱時，跳轉到「⭐ 收藏」分頁並定位該筆收藏
+      const handleJumpToSavedPlace = (placeName, savedUid) => {
+        const matched = allSavedPlaces.find(p => (savedUid && p.uid === savedUid) || p.name === placeName);
+        setSavedFilterType('all');
+        setSelectedCity('');
+        setSelectedCategory('');
+        setOnlyOpenNow(false);
+        setSearchKeyword(matched ? matched.name : (placeName || ''));
+        setActiveTab('saved');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (matched) {
+          showToast(`⭐ 已為你跳轉至「${matched.name}」的收藏卡片！`);
+        } else {
+          showToast(`🔍 已切換至收藏庫搜尋「${placeName}」`);
+        }
+      };
+
+      const handleCreateNewTrip = (e) => {
+        e.preventDefault();
+        if (!newTripTitle.trim()) return showToast('請輸入旅程名稱');
+        const members = [...new Set(newTripMembers.split('\n').map(s => s.trim()).filter(Boolean))];
+        const tripPlaces = [];
+        const tripEvents = [];
+
+        newTripPickedIds.forEach((uid, idx) => {
+          const col = allSavedPlaces.find(x => x.uid === uid);
+          if (!col) return;
+          const coords = window.parseCoordsFromUrl(col.mapUrl);
+          const pid = 'p_' + Date.now() + '_' + idx;
+          tripPlaces.push({
+            id: pid,
+            savedUid: col.uid,
+            name: col.name,
+            category: col.sourceTab === 'food' ? 'food' : 'spot',
+            city: col.city || '',
+            address: col.address || '',
+            url: col.mapUrl || '',
+            note: col.combinedNote || '',
+            cost: 0,
+            lat: coords.lat,
+            lng: coords.lng
+          });
+          const hour = String(10 + (idx % 8)).padStart(2, '0') + ':00';
+          tripEvents.push({
+            id: 'ev_' + Date.now() + '_' + idx,
+            kind: 'place',
+            placeId: pid,
+            day: 1,
+            time: hour,
+            category: col.sourceTab === 'food' ? 'food' : 'spot',
+            note: col.combinedNote || '',
+            cost: 0,
+            transitToNext: { mode: 'taxi', duration: '車程約 15 分鐘', cost: 0, note: '' }
+          });
+        });
+
+        const newTrip = {
+          id: 'trip_' + Date.now(),
+          title: newTripTitle.trim(),
+          start: newTripStart,
+          days: Number(newTripDays) || 3,
+          day: 1,
+          dayTitles: { 1: 'Day 1 精彩啟程' },
+          members: members.length ? members : ['我'],
+          rates: { TWD: 1, JPY: 0.215, USD: 32.1, KRW: 0.024, EUR: 35 },
+          places: tripPlaces,
+          events: tripEvents,
+          expenses: []
+        };
+
+        const nextTrips = [newTrip, ...trips];
+        syncTripsToCloud(nextTrips);
+        setNewTripTitle('');
+        setNewTripPickedIds([]);
+        setActiveTripId(newTrip.id);
+        setActiveTab('trips');
+        showToast('🎉 新旅程建立完成！已自動同步至雲端試算表');
+      };
+
+      const handleQuickAddPlaceToTrip = (colItem) => {
+        if (trips.length === 0) {
+          setNewTripPickedIds([colItem.uid]);
+          setActiveTab('createTrip');
+          showToast('請先建立一趟新旅程，已為你預先勾選此地點！');
+          return;
+        }
+        const targetTrip = trips[0];
+        const coords = window.parseCoordsFromUrl(colItem.mapUrl);
+        const pid = 'p_' + Date.now();
+        const cat = colItem.sourceTab === 'food' ? 'food' : 'spot';
+        const newPlace = {
+          id: pid,
+          savedUid: colItem.uid,
+          name: colItem.name,
+          category: cat,
+          city: colItem.city || '',
+          address: colItem.address || '',
+          url: colItem.mapUrl || '',
+          note: colItem.combinedNote || '',
+          cost: 0,
+          lat: coords.lat,
+          lng: coords.lng
+        };
+        const newEvent = {
+          id: 'ev_' + Date.now(),
+          kind: 'place',
+          placeId: pid,
+          day: 1,
+          time: '12:00',
+          category: cat,
+          note: colItem.combinedNote || '',
+          cost: 0,
+          transitToNext: { mode: 'taxi', duration: '車程約 15 分鐘', cost: 0, note: '' }
+        };
+        const updatedTrip = {
+          ...targetTrip,
+          places: [...(targetTrip.places || []), newPlace],
+          events: [...(targetTrip.events || []), newEvent]
+        };
+        const nextTrips = trips.map(t => t.id === targetTrip.id ? updatedTrip : t);
+        syncTripsToCloud(nextTrips);
+        showToast(`✅ 已排入「${targetTrip.title}」的 Day 1！`);
+      };
+
+      const handleWebImportSubmit = async () => {
+        if (!importText.trim()) return showToast('請貼上社群貼文網址或內容');
+        setIsImporting(true);
+        try {
+          const res = await fetch(window.GAS_API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'webExtractPlaces', text: importText })
+          });
+          const data = await res.json();
+          if (data.items && data.items.length > 0) {
+            showToast(`🎉 成功辨識並收錄 ${data.items.length} 個地點！正在重新載入...`);
+            setShowImportModal(false);
+            setImportText('');
+            await loadAllData();
+          } else {
+            showToast('🤔 未能辨識出明確店名，建議複製貼文內文再試一次');
+          }
+        } catch (e) {
+          showToast('連線逾時，請稍後點擊右上角同步查看結果');
+        } finally {
+          setIsImporting(false);
+        }
+      };
+
+      const activeTripObj = useMemo(() => trips.find(t => t.id === activeTripId), [trips, activeTripId]);
+      const CardComp = window.CollectionCard;
+      const TripComp = window.TripWorkspace;
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          <header className="sticky top-0 z-30 bg-paper/90 backdrop-blur-md border-b border-line px-4 py-3.5">
+            <div className="max-w-5xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => { setActiveTab('home'); setActiveTripId(null); }}>
+                <span className="w-9 h-9 rounded-xl bg-deep text-[#e1bc83] font-bold text-lg grid place-items-center -rotate-6 shadow-sm">✧</span>
+                <div>
+                  <strong className="text-base font-serif tracking-tight text-deep block leading-none">Nana's Life & Travel</strong>
+                  <small className="text-[10px] tracking-widest uppercase text-muted font-semibold">FOREST EDITORIAL JOURNAL</small>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="text-xs bg-soft hover:bg-accent hover:text-white text-accent font-bold px-3 py-2 rounded-xl border border-[#cde4d7] transition-colors"
+                >
+                  ＋ 貼文AI匯入
+                </button>
+                <button
+                  onClick={loadAllData}
+                  className="text-xs bg-white hover:bg-paper text-ink font-bold px-3 py-2 rounded-xl border border-line"
+                  title="從 Google 試算表同步最新資料"
+                >
+                  {isLoading ? '同步中...' : '↻ 同步'}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-6 pb-16">
+            
+            {/* 🏠 分頁 1：首頁 */}
+            {activeTab === 'home' && (
+              <div className="space-y-7 animate-fade-in">
+                <div className="bg-deep text-white rounded-3xl p-7 shadow-xl relative overflow-hidden">
+                  <div className="max-w-xl space-y-2 relative z-10">
+                    <p className="text-[11px] tracking-widest uppercase text-[#a8ceae] font-bold">PLAN · EXPLORE · REMEMBER</p>
+                    <h1 className="text-2xl sm:text-3xl font-serif font-bold leading-tight">
+                      把日常心動的每個瞬間，<br />排成下一趟好旅行。
+                    </h1>
+                    <p className="text-xs text-[#b4d2c7] leading-relaxed pt-1">
+                      直接將社群貼文或網址分享給 LINE，AI 會自動為你辨識所有餐廳與景點、整理必點招牌與 Google 圖片並同步至此。
+                    </p>
+                    <div className="flex flex-wrap gap-2.5 pt-3">
+                      <button onClick={() => setActiveTab('createTrip')} className="bg-[#e3c38f] text-deep font-bold text-xs px-4 py-2.5 rounded-xl shadow hover:opacity-95">
+                        ➕ 規劃新旅程
+                      </button>
+                      <button onClick={() => setActiveTab('saved')} className="bg-white/15 text-white font-bold text-xs px-4 py-2.5 rounded-xl border border-white/20 hover:bg-white/25">
+                        ⭐ 瀏覽收藏庫 ({allSavedPlaces.length})
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[180px] text-white/5 absolute -right-6 -top-16 pointer-events-none select-none">✦</div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                  <div onClick={() => { setSavedFilterType('food'); setActiveTab('saved'); }} className="editorial-card p-4 cursor-pointer hover:border-accent transition-colors">
+                    <small className="text-xs text-muted font-semibold">🍽️ 美食餐廳收藏</small>
+                    <strong className="block text-2xl font-extrabold text-deep mt-1">{db.food.length} <span className="text-xs font-normal text-muted">間</span></strong>
+                  </div>
+                  <div onClick={() => { setSavedFilterType('spot'); setActiveTab('saved'); }} className="editorial-card p-4 cursor-pointer hover:border-accent transition-colors">
+                    <small className="text-xs text-muted font-semibold">📸 仙女打卡景點</small>
+                    <strong className="block text-2xl font-extrabold text-accent mt-1">{db.spot.length} <span className="text-xs font-normal text-muted">處</span></strong>
+                  </div>
+                  <div onClick={() => setActiveTab('trips')} className="editorial-card p-4 cursor-pointer hover:border-accent transition-colors">
+                    <small className="text-xs text-muted font-semibold">🗓️ 規劃好的行程</small>
+                    <strong className="block text-2xl font-extrabold text-deep mt-1">{trips.length} <span className="text-xs font-normal text-muted">趟</span></strong>
+                  </div>
+                  <div onClick={() => setActiveTab('shop')} className="editorial-card p-4 cursor-pointer hover:border-accent transition-colors">
+                    <small className="text-xs text-muted font-semibold">🛍️ 購物戰利品</small>
+                    <strong className="block text-2xl font-extrabold text-gold mt-1">{db.shop.length} <span className="text-xs font-normal text-muted">件</span></strong>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="editorial-card p-5 flex flex-col justify-between space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-accent">NEXT ADVENTURE</span>
+                        <button onClick={() => setActiveTab('trips')} className="text-xs text-muted hover:text-deep font-bold">查看全部 →</button>
+                      </div>
+                      {trips.length > 0 ? (
+                        <div className="bg-paper rounded-2xl p-4 border border-line space-y-2">
+                          <h3 className="text-lg font-bold text-deep">{trips[0].title}</h3>
+                          <p className="text-xs text-muted">📅 {trips[0].start} 出發 · 共 {trips[0].days} 天 · {(trips[0].places || []).length} 個景點</p>
+                          <div className="pt-2">
+                            <button
+                              onClick={() => { setActiveTripId(trips[0].id); setActiveTab('trips'); }}
+                              className="bg-deep text-white text-xs font-bold px-4 py-2 rounded-xl"
+                            >
+                              進入行程工作台 & 匯出漂亮行程表 →
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 bg-paper rounded-2xl border border-dashed border-line text-xs text-muted">
+                          目前還沒有建立行程，點擊下方「➕ 新行程」開始規劃吧！
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="editorial-card p-5 flex flex-col justify-between space-y-4">
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-gold">DAILY INSPIRATION</span>
+                      <h3 className="text-base font-bold text-deep mt-1">🎲 選擇困難嗎？幫你隨機抽一個！</h3>
+                      {luckyItem ? (
+                        <div className="mt-3 p-3.5 bg-soft/60 rounded-2xl border border-[#cde4d7] flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold text-accent">{luckyItem.sourceTab === 'food' ? '🍽️ 餐廳' : '📸 景點'} · {luckyItem.city}</span>
+                            <strong className="block text-sm text-deep truncate">{luckyItem.name}</strong>
+                            <p className="text-xs text-muted truncate">{luckyItem.combinedNote || luckyItem.foodType}</p>
+                          </div>
+                          {luckyItem.mapUrl && (
+                            <a href={luckyItem.mapUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs bg-white px-3 py-1.5 rounded-xl font-bold text-accent border border-line">
+                              地圖 ↗
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted mt-2">從你收集的 {allSavedPlaces.length} 個餐廳與景點中，隨機抽出今天的靈感目的地。</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          if (!db.food.length) return showToast('目前還沒有美食收藏喔');
+                          setLuckyItem(db.food[Math.floor(Math.random() * db.food.length)]);
+                        }}
+                        className="flex-1 bg-paper hover:bg-soft text-deep font-bold text-xs py-2.5 rounded-xl border border-line transition-colors"
+                      >
+                        🍣 抽美食
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!db.spot.length) return showToast('目前還沒有景點收藏喔');
+                          setLuckyItem(db.spot[Math.floor(Math.random() * db.spot.length)]);
+                        }}
+                        className="flex-1 bg-paper hover:bg-soft text-deep font-bold text-xs py-2.5 rounded-xl border border-line transition-colors"
+                      >
+                        ⛰️ 抽景點
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-serif font-bold text-deep">✨ 最新從 LINE 收錄的地點</h2>
+                    <button onClick={() => setActiveTab('saved')} className="text-xs font-bold text-accent hover:underline">查看全部收藏 →</button>
+                  </div>
+                  {allSavedPlaces.length === 0 ? (
+                    <div className="editorial-card p-10 text-center text-xs text-muted">
+                      {isLoading ? '正在從 Google 試算表載入你的收藏...' : '目前還沒有收藏，快把社群貼文網址傳給 LINE 機器人吧！'}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {CardComp && allSavedPlaces.slice(0, 3).map(item => (
+                        <CardComp
+                          key={item.uid}
+                          item={item}
+                          onUpdateNote={handleUpdateNote}
+                          onUpdateCategory={handleUpdateCategory}
+                          onDelete={handleDeleteItem}
+                          onAddToTrip={handleQuickAddPlaceToTrip}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ⭐ 分頁 2：收藏 */}
+            {activeTab === 'saved' && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-accent">SAVED PLACES & RESTAURANTS</p>
+                    <h1 className="text-2xl font-serif font-bold text-deep mt-0.5">⭐ 娜娜的景點與餐廳收藏庫</h1>
+                    <p className="text-xs text-muted mt-1">LINE 傳送貼文網址或截圖自動分類收錄，AI 必點招牌與門票資訊皆已整合於卡片備註中。</p>
+                  </div>
+                  <div className="flex gap-1.5 bg-white p-1 rounded-2xl border border-line self-start">
+                    {[
+                      ['all', `全部 (${allSavedPlaces.length})`],
+                      ['food', `🍽️ 餐廳 (${db.food.length})`],
+                      ['spot', `📸 景點 (${db.spot.length})`]
+                    ].map(([k, label]) => (
+                      <button
+                        key={k}
+                        onClick={() => { setSavedFilterType(k); setSelectedCategory(''); }}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${savedFilterType === k ? 'bg-deep text-white shadow-sm' : 'text-muted hover:text-ink'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="editorial-card p-4 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                  <div className="sm:col-span-5 relative">
+                    <input
+                      type="text"
+                      placeholder="🔍 搜尋店名、景點、地址或必點招牌備註..."
+                      value={searchKeyword}
+                      onChange={e => setSearchKeyword(e.target.value)}
+                      className="w-full bg-paper border border-line rounded-xl px-3.5 py-2.5 text-xs text-ink pr-8"
+                    />
+                    {searchKeyword && (
+                      <button
+                        onClick={() => setSearchKeyword('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted hover:text-deep font-bold"
+                        title="清除搜尋"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <div className="sm:col-span-3">
+                    <select
+                      value={selectedCity}
+                      onChange={e => setSelectedCity(e.target.value)}
+                      className="w-full bg-paper border border-line rounded-xl px-3 py-2.5 text-xs text-ink font-semibold"
+                    >
+                      <option value="">📍 全部縣市地區</option>
+                      {availableCities.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <select
+                      value={selectedCategory}
+                      onChange={e => setSelectedCategory(e.target.value)}
+                      className="w-full bg-paper border border-line rounded-xl px-3 py-2.5 text-xs text-ink font-semibold"
+                    >
+                      <option value="">🏷️ 全部分類</option>
+                      {currentCategoryOptions.map((c, idx) => (
+                        <option key={`${c.name}_${idx}`} value={c.name}>{c.name} {c.emoji}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <button
+                      onClick={() => setOnlyOpenNow(!onlyOpenNow)}
+                      className={`w-full py-2.5 rounded-xl text-xs font-bold border transition-colors ${onlyOpenNow ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-paper text-muted border-line'}`}
+                    >
+                      🕒 營業中
+                    </button>
+                  </div>
+                </div>
+
+                {filteredSavedPlaces.length === 0 ? (
+                  <div className="editorial-card p-12 text-center space-y-3">
+                    <p className="text-sm font-bold text-deep">沒有找到符合條件的收藏地點</p>
+                    <p className="text-xs text-muted">你可以調整篩選條件，或將社群貼文傳給 LINE 機器人自動辨識收錄！</p>
+                    {searchKeyword && (
+                      <button onClick={() => setSearchKeyword('')} className="bg-deep text-white text-xs font-bold px-4 py-2 rounded-xl">
+                        顯示全部收藏
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {CardComp && filteredSavedPlaces.slice(0, visibleCount).map(item => (
+                        <CardComp
+                          key={item.uid}
+                          item={item}
+                          onUpdateNote={handleUpdateNote}
+                          onUpdateCategory={handleUpdateCategory}
+                          onDelete={handleDeleteItem}
+                          onAddToTrip={handleQuickAddPlaceToTrip}
+                        />
+                      ))}
+                    </div>
+
+                    {visibleCount < filteredSavedPlaces.length && (
+                      <div className="text-center pt-2">
+                        <button
+                          onClick={() => setVisibleCount(prev => prev + 12)}
+                          className="bg-white hover:bg-soft text-deep font-bold text-xs px-6 py-3 rounded-2xl border border-line shadow-sm transition-colors"
+                        >
+                          👇 載入更多收藏（目前顯示 {visibleCount} / 共 {filteredSavedPlaces.length} 筆）
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ➕ 分頁 3：建立新行程 */}
+            {activeTab === 'createTrip' && (
+              <div className="max-w-2xl mx-auto animate-fade-in">
+                <form onSubmit={handleCreateNewTrip} className="editorial-card p-6 sm:p-8 space-y-5">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-accent">CREATE NEW ITINERARY</p>
+                    <h1 className="text-2xl font-serif font-bold text-deep mt-1">➕ 建立新旅程 & 匯入收藏景點</h1>
+                    <p className="text-xs text-muted mt-1">建立後會自動同步備份至你的 Google 試算表，並將勾選的收藏地點（含 AI 必點備註）帶入行程表。</p>
+                  </div>
+
+                  <div className="space-y-4 text-xs">
+                    <div>
+                      <label className="font-bold text-deep block mb-1.5">旅程名稱 *</label>
+                      <input
+                        type="text"
+                        placeholder="例如：台南美食三天兩夜、東京賞櫻自由行"
+                        value={newTripTitle}
+                        onChange={e => setNewTripTitle(e.target.value)}
+                        className="w-full bg-paper border border-line rounded-xl px-4 py-3 text-sm text-ink font-semibold"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-deep block mb-1.5">出發日期 *</label>
+                        <input
+                          type="date"
+                          value={newTripStart}
+                          onChange={e => setNewTripStart(e.target.value)}
+                          className="w-full bg-paper border border-line rounded-xl px-3.5 py-2.5 text-ink"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-deep block mb-1.5">旅行天數 *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="60"
+                          value={newTripDays}
+                          onChange={e => setNewTripDays(e.target.value)}
+                          className="w-full bg-paper border border-line rounded-xl px-3.5 py-2.5 text-ink"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-deep block mb-1.5">同行旅伴名單（一行一位，用於分帳計算）</label>
+                      <textarea
+                        rows="2"
+                        value={newTripMembers}
+                        onChange={e => setNewTripMembers(e.target.value)}
+                        className="w-full bg-paper border border-line rounded-xl p-3 text-ink"
+                      />
+                    </div>
+
+                    <div className="pt-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="font-bold text-deep text-sm">⭐ 勾選要帶入這趟旅程的收藏 ({newTripPickedIds.length} 個已選)</label>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="🔍 篩選收藏的餐廳、景點或縣市..."
+                        value={newTripFilter}
+                        onChange={e => setNewTripFilter(e.target.value)}
+                        className="w-full bg-paper border border-line rounded-xl px-3.5 py-2 mb-2.5 text-ink"
+                      />
+
+                      <div className="max-h-72 overflow-y-auto space-y-2 border border-line rounded-2xl p-3 bg-paper/50">
+                        {allSavedPlaces.length === 0 ? (
+                          <div className="text-center py-6 text-muted">目前收藏庫還是空的，可先建立空白旅程，之後再隨時加入景點！</div>
+                        ) : (
+                          allSavedPlaces
+                            .filter(p => `${p.name} ${p.city} ${p.foodType}`.toLowerCase().includes(newTripFilter.toLowerCase()))
+                            .map(p => {
+                              const checked = newTripPickedIds.includes(p.uid);
+                              return (
+                                <label key={p.uid} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${checked ? 'bg-soft border-accent' : 'bg-white border-line'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={e => {
+                                      if (e.target.checked) setNewTripPickedIds([...newTripPickedIds, p.uid]);
+                                      else setNewTripPickedIds(newTripPickedIds.filter(id => id !== p.uid));
+                                    }}
+                                    className="mt-1"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-paper border border-line">
+                                        {p.sourceTab === 'food' ? '🍽️ 餐廳' : '📸 景點'}
+                                      </span>
+                                      <strong className="text-xs font-bold text-deep truncate">{p.name}</strong>
+                                      <span className="text-[11px] text-muted">({p.city || '未分類'})</span>
+                                    </div>
+                                    {p.combinedNote && <p className="text-[11px] text-muted truncate mt-0.5">{p.combinedNote}</p>}
+                                  </div>
+                                </label>
+                              );
+                            })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="w-full py-3.5 rounded-2xl bg-deep hover:bg-accent text-white font-bold text-sm shadow-lg transition-colors">
+                    ✨ 立即建立旅程並開始排程
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* 🗓️ 分頁 4：行程 */}
+            {activeTab === 'trips' && (
+              <div className="animate-fade-in">
+                {activeTripObj && TripComp ? (
+                  <TripComp
+                    trip={activeTripObj}
+                    allSavedPlaces={allSavedPlaces}
+                    onUpdateTrip={(updated) => {
+                      const next = trips.map(t => t.id === updated.id ? updated : t);
+                      syncTripsToCloud(next);
+                    }}
+                    onBack={() => setActiveTripId(null)}
+                    onJumpToSaved={handleJumpToSavedPlace}
+                    showToast={showToast}
+                  />
+                ) : (
+                  <div className="space-y-5">
+                    <div className="flex items-end justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-accent">MY TRAVEL ITINERARIES</p>
+                        <h1 className="text-2xl font-serif font-bold text-deep mt-0.5">🗓️ 娜娜的旅程規劃簿</h1>
+                        <p className="text-xs text-muted mt-1">所有行程皆自動同步備份於 Google 試算表，點入即可編輯時間軸、航班、交通與一鍵匯出漂亮行程表。</p>
+                      </div>
+                      <button onClick={() => setActiveTab('createTrip')} className="bg-accent text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow">
+                        ➕ 新增一趟旅程
+                      </button>
+                    </div>
+
+                    {trips.length === 0 ? (
+                      <div className="editorial-card p-12 text-center space-y-3">
+                        <p className="text-base font-bold text-deep">目前還沒有任何行程紀錄</p>
+                        <p className="text-xs text-muted">點擊下方中間的「➕ 新行程」按鈕，把收藏的餐廳與景點排成一趟旅行吧！</p>
+                        <button onClick={() => setActiveTab('createTrip')} className="bg-deep text-white text-xs font-bold px-5 py-2.5 rounded-xl mt-2">
+                          ➕ 立即建立第一趟行程
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {trips.map(t => {
+                          const evCost = (t.events || []).reduce((acc, ev) => acc + (Number(ev.cost) || 0) + (Number(ev.transitToNext?.cost) || 0), 0);
+                          const expCost = (t.expenses || []).reduce((a, e) => a + Number(e.twd || 0), 0);
+                          const totalCost = evCost + expCost;
+                          return (
+                            <div key={t.id} className="editorial-card p-5 flex flex-col justify-between space-y-4 hover:border-accent transition-colors">
+                              <div>
+                                <div className="flex items-center justify-between text-xs text-muted mb-1">
+                                  <span className="font-bold text-accent">📅 {t.start} 出發 · {t.days} 天</span>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`確定要刪除「${t.title}」這趟行程嗎？`)) {
+                                        syncTripsToCloud(trips.filter(x => x.id !== t.id));
+                                        showToast('🗑️ 已刪除行程');
+                                      }
+                                    }}
+                                    className="text-gray-400 hover:text-red-500"
+                                  >
+                                    刪除 ✕
+                                  </button>
+                                </div>
+                                <h3 className="text-xl font-serif font-bold text-deep">{t.title}</h3>
+                                <p className="text-xs text-muted mt-1">
+                                  📍 {(t.places || []).length} 個地點 · 🗓️ {(t.events || []).length} 個排程項目 · 💰 預估總花費 NT$ {totalCost.toLocaleString()}
+                                </p>
+                              </div>
+                              <div className="flex items-center justify-between pt-3 border-t border-line">
+                                <span className="text-xs text-muted">👥 旅伴：{(t.members || ['我']).join('、')}</span>
+                                <button
+                                  onClick={() => setActiveTripId(t.id)}
+                                  className="bg-deep hover:bg-accent text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors"
+                                >
+                                  打開行程 & 匯出 →
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 🛍️ 分頁 5：購物 */}
+            {activeTab === 'shop' && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-gold">SHOPPING & WISHLIST</p>
+                    <h1 className="text-2xl font-serif font-bold text-deep mt-0.5">🛍️ 娜娜的購物戰利品圖鑑</h1>
+                    <p className="text-xs text-muted mt-1">在 LINE 輸入「買起來！！」即可傳送商品圖片建檔，支援蝦皮一鍵比價與分類管理。</p>
+                  </div>
+                  <select
+                    value={shopCategory}
+                    onChange={e => setShopCategory(e.target.value)}
+                    className="bg-white border border-line rounded-xl px-3.5 py-2.5 text-xs text-ink font-bold self-start"
+                  >
+                    <option value="">📦 全部商品分類 ({db.shop.length})</option>
+                    {((window.categoriesData && window.categoriesData.shop) || []).map((c, idx) => (
+                      <option key={`${c.name}_${idx}`} value={c.name}>{c.name} {c.emoji}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {db.shop.filter(x => !shopCategory || x.foodType === shopCategory).length === 0 ? (
+                  <div className="editorial-card p-12 text-center text-xs text-muted">
+                    目前沒有符合此分類的購物清單喔！
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {CardComp && db.shop
+                      .filter(x => !shopCategory || x.foodType === shopCategory)
+                      .map(item => (
+                        <CardComp
+                          key={item.uid}
+                          item={item}
+                          onUpdateNote={handleUpdateNote}
+                          onUpdateCategory={handleUpdateCategory}
+                          onDelete={handleDeleteItem}
+                        />
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+          </main>
+
+          {showImportModal && (
+            <div className="fixed inset-0 bg-deep/60 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-lg text-deep">✨ 貼文 / 網址 AI 智慧多店匯入</h3>
+                  <button onClick={() => setShowImportModal(false)} className="text-muted">✕</button>
+                </div>
+                <p className="text-xs text-muted leading-relaxed">
+                  除了直接分享給 LINE 機器人之外，你也可以在這裡貼上 Threads / 小紅書網址或整篇美食旅遊貼文，後端 Gemini AI 會自動擷取裡面所有的餐廳與景點、查好 Google 圖片並寫入雲端試算表！
+                </p>
+                <textarea
+                  rows="5"
+                  placeholder="在此貼上貼文網址或文字內容（支援一次多間店）..."
+                  value={importText}
+                  onChange={e => setImportText(e.target.value)}
+                  className="w-full bg-paper border border-line rounded-2xl p-3.5 text-xs text-ink outline-none"
+                />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setShowImportModal(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-muted">取消</button>
+                  <button
+                    onClick={handleWebImportSubmit}
+                    disabled={isImporting}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold bg-accent text-white disabled:opacity-50"
+                  >
+                    {isImporting ? '🤖 AI 正在辨識並抓取 Google 照片中...' : '開始 AI 辨識收錄'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {toastMsg && (
+            <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-deep text-white text-xs font-bold px-5 py-3 rounded-2xl shadow-xl border border-white/15 animate-fade-in">
+              {toastMsg}
+            </div>
+          )}
+
+          <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-line shadow-[0_-8px_30px_rgba(16,45,50,0.06)] px-2 py-1.5 pb-[calc(6px+env(safe-area-inset-bottom))]">
+            <div className="max-w-md mx-auto grid grid-cols-5 items-center gap-1">
+              <button
+                onClick={() => { setActiveTab('home'); setActiveTripId(null); window.scrollTo(0,0); }}
+                className={`flex flex-col items-center py-1.5 rounded-xl transition-colors ${activeTab === 'home' ? 'text-accent bg-soft font-bold' : 'text-muted hover:text-deep font-medium'}`}
+              >
+                <span className="text-lg leading-none">🏠</span>
+                <span className="text-[11px] mt-1">首頁</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('saved'); window.scrollTo(0,0); }}
+                className={`flex flex-col items-center py-1.5 rounded-xl transition-colors ${activeTab === 'saved' ? 'text-accent bg-soft font-bold' : 'text-muted hover:text-deep font-medium'}`}
+              >
+                <span className="text-lg leading-none">⭐</span>
+                <span className="text-[11px] mt-1">收藏</span>
+              </button>
+
+              <div className="flex justify-center">
+                <button
+                  onClick={() => { setActiveTab('createTrip'); window.scrollTo(0,0); }}
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold shadow-md transition-transform active:scale-95 ${activeTab === 'createTrip' ? 'bg-accent text-white ring-4 ring-soft' : 'bg-deep text-[#e3c38f] hover:bg-accent hover:text-white'}`}
+                  title="建立新行程並匯入收藏"
+                >
+                  ＋
+                </button>
+              </div>
+
+              <button
+                onClick={() => { setActiveTab('trips'); window.scrollTo(0,0); }}
+                className={`flex flex-col items-center py-1.5 rounded-xl transition-colors ${activeTab === 'trips' ? 'text-accent bg-soft font-bold' : 'text-muted hover:text-deep font-medium'}`}
+              >
+                <span className="text-lg leading-none">🗓️</span>
+                <span className="text-[11px] mt-1">行程</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('shop'); window.scrollTo(0,0); }}
+                className={`flex flex-col items-center py-1.5 rounded-xl transition-colors ${activeTab === 'shop' ? 'text-accent bg-soft font-bold' : 'text-muted hover:text-deep font-medium'}`}
+              >
+                <span className="text-lg leading-none">🛍️</span>
+                <span className="text-[11px] mt-1">購物</span>
+              </button>
+            </div>
+          </nav>
+        </div>
+      );
+    }
+
     function bootApp(retries = 60) {
       if (window.CollectionCard) {
         const root = ReactDOM.createRoot(document.getElementById('root'));
