@@ -349,6 +349,21 @@
     });
   }
 
+  function cropCanvas(source, bounds) {
+    const left = Math.min(70, Math.max(0, Number(bounds.left) || 0)) / 100;
+    const right = Math.min(70, Math.max(0, Number(bounds.right) || 0)) / 100;
+    const top = Math.min(70, Math.max(0, Number(bounds.top) || 0)) / 100;
+    const bottom = Math.min(70, Math.max(0, Number(bounds.bottom) || 0)) / 100;
+    const x = Math.round(source.width * left);
+    const y = Math.round(source.height * top);
+    const width = Math.max(1, Math.round(source.width * (1 - left - right)));
+    const height = Math.max(1, Math.round(source.height * (1 - top - bottom)));
+    const canvas = root.document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(source, x, y, width, height, 0, 0, width, height);
+    return canvas;
+  }
   async function recognizeDetailed(canvas, lang) {
     const T = await loadTesseract();
     const useLang = lang === 'vie' ? 'vie+eng' : (lang || 'vie');
@@ -412,6 +427,7 @@
     ocrLangFor: ocrLangFor,
     loadTesseract: loadTesseract,
     downscale: downscale,
+    cropCanvas: cropCanvas,
     recognize: recognize,
     recognizeDetailed: recognizeDetailed,
     scanLineItems: scanLineItems,
