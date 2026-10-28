@@ -1513,7 +1513,9 @@ window.TripWorkspace = function TripWorkspace({
       const photo = canvas.toDataURL('image/jpeg', 0.72);
       const ocr = await api.recognizeDetailed(canvas, api.ocrLangFor(resolvedCountry));
       const text = ocr.text;
-      setScanResult({ photo, text, pack, ocr, items:api.scanLineItems(text,pack.dishes,resolvedCountry,ocr.lines), result: api.matchLines(text, pack.dishes) });
+      const items = api.scanLineItems(text,pack.dishes,resolvedCountry,ocr.lines);
+      const usefulText = items.map(item=>item.original).join('\\n');
+      setScanResult({ photo, text, pack, ocr, items, result: api.matchLines(usefulText, pack.dishes) });
     } catch (err) {
       if (showToast) showToast(err.message || '辨識失敗');
     } finally {
@@ -3437,7 +3439,7 @@ window.TripWorkspace = function TripWorkspace({
                 ))}
               </div>
             ) : null}
-            <p className="text-[11px] text-muted mb-2">中文直接標在原文下方。若菜單太密集，請看下面的逐行對照；辨識推測不代表食材已確認。</p>
+            <p className="text-[11px] text-muted mb-2">中文直接標在原文下方。已略過部分辨識雜訊與菜單頁尾；辨識推測不代表食材已確認。</p>
             {(scanResult.items||[]).length>0 && <div className="bg-white rounded-2xl border border-line p-3 space-y-2 mb-3">
               {(scanResult.items||[]).map((item,i)=><div key={i} className="border-b border-line last:border-0 pb-2">
                 <div className="text-xs font-bold text-deep">{item.original}</div>
@@ -3456,7 +3458,7 @@ window.TripWorkspace = function TripWorkspace({
                 {scanResult.result.matched.map(d => renderDish(d, { star: false, keyExtra: 'scan' }))}
               </div>
             )}
-            {scanResult.result.unmatched.length > 0 && (
+            {false && scanResult.result.unmatched.length > 0 && (
               <div className="bg-white border border-line rounded-2xl p-3 space-y-2 mb-3">
                 <p className="text-[11px] font-bold text-muted">沒對上字典</p>
                 {scanResult.result.unmatched.map(line => (
