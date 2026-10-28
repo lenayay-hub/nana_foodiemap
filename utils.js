@@ -12,11 +12,11 @@ window.loadNanaFood = function () {
   if (window.__nanaFoodPromise) return window.__nanaFoodPromise;
   window.__nanaFoodPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'food-logic.js?v=20261028-ocr4';
+    s.src = 'food-logic.js?v=20261029-fix5';
     s.async = true;
     s.onload = function () {
       if (window.NanaFood && window.NanaFood.ready) resolve(window.NanaFood);
-      else reject(new Error('字典載入失敗'));
+      else { window.__nanaFoodPromise = null; reject(new Error('字典載入失敗')); }
     };
     s.onerror = function () {
       window.__nanaFoodPromise = null;
