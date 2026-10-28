@@ -238,7 +238,7 @@
   // Preserve Vietnamese vowel distinctions: bơ (avocado) is NOT bò (beef).
   function vnKey(value) {
     return String(value||'').normalize('NFC').toLocaleLowerCase('vi')
-      .replace(/[^\\p{L}\\p{N}\\s]/gu,' ').replace(/\\s+/g,' ').trim();
+      .replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim();
   }
   const VN_MENU = [
     ['kem bơ','酪梨冰淇淋'],['cafe nâu','越式奶咖啡'],['cà phê nâu','越式奶咖啡'],
@@ -257,7 +257,7 @@
   const VN_MAP = new Map(VN_MENU.map(([v,zh])=>[vnKey(v),zh]));
   function explainLine(raw,dishes,country) {
     const original=String(raw||'').trim();
-    const name=original.replace(/\\s+\\d[\\d.,]*\\s*(?:₫|đ|vnd|k)?\\s*$/i,'').trim();
+    const name=original.replace(/\s+\d[\d.,]*\s*(?:₫|đ|vnd|k)?\s*$/i,'').trim();
     const key=vnKey(name);
     const list=Array.isArray(dishes)?dishes:[];
     // Curated exact names take precedence over tone-insensitive generic dictionary entries.
@@ -283,17 +283,17 @@
   function isMenuCandidate(text, confidence, hasDish) {
     const s=String(text||'').trim();
     if(!s || s.length<2) return false;
-    if(/(?:michelin|recommendations|restaurant|cuisine|gourmand|vat|thuế|tax|service charge|giá chưa|đơn vị|vnd|www\\.|https?:|copyright)/i.test(s)) return false;
-    if(/^[^\\p{L}]*$/u.test(s)) return false;
-    const letters=(s.match(/\\p{L}/gu)||[]).length;
+    if(/(?:michelin|recommendations|restaurant|cuisine|gourmand|vat|thuế|tax|service charge|giá chưa|đơn vị|vnd|www\.|https?:|copyright)/i.test(s)) return false;
+    if(/^[^\p{L}]*$/u.test(s)) return false;
+    const letters=(s.match(/\p{L}/gu)||[]).length;
     if(letters<2 || letters/s.length<.55) return false;
     if(!hasDish && Number.isFinite(confidence) && confidence<55) return false;
-    if(!hasDish && /(?:[<>~^_=]|\\d{4}|[“”]{2})/.test(s)) return false;
-    if(!hasDish && s.split(/\\s+/).length===1 && s.length<3) return false;
+    if(!hasDish && /(?:[<>~^_=]|\d{4}|[“”]{2})/.test(s)) return false;
+    if(!hasDish && s.split(/\s+/).length===1 && s.length<3) return false;
     return true;
   }
   function scanLineItems(text,dishes,country,lines) {
-    const input=Array.isArray(lines)&&lines.length?lines:String(text||'').split(/\\n+/).map(text=>({text}));
+    const input=Array.isArray(lines)&&lines.length?lines:String(text||'').split(/\n+/).map(text=>({text}));
     return input.map(line=>({...explainLine(line.text,dishes,country),bbox:line.bbox||null,confidence:line.confidence}))
       .filter(line=>isMenuCandidate(line.original,line.confidence,!!line.dish) && !!line.zh);
   }
