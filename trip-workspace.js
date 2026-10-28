@@ -18,13 +18,209 @@ const CATEGORY_META = {
   airport: { label: '機場', icon: '✈️', badgeCls: 'bg-sky-50 text-sky-700 border-sky-200' }
 };
 
-const TRANSIT_META = {
-  taxi:    { label: '計程車 / Grab', icon: '🚕' },
-  walk:    { label: '走路散步',      icon: '🚶' },
-  public:  { label: '大眾運輸',      icon: '🚌' },
-  scooter: { label: '機車 / 租車',   icon: '🛵' },
-  flight:  { label: '航廈動線',      icon: '🛫' }
+const TRANSIT_MODES = [
+  { id: 'taxi', label: '計程車' },
+  { id: 'plane', label: '飛機' },
+  { id: 'walk', label: '步行' },
+  { id: 'boat', label: '船' },
+  { id: 'bus', label: '公車' },
+  { id: 'train', label: '火車' },
+  { id: 'scooter', label: '機車' }
+];
+const LEGACY_TRANSIT = {
+  taxi: 'taxi', walk: 'walk', public: 'bus', scooter: 'scooter',
+  flight: 'walk', plane: 'plane', boat: 'boat', bus: 'bus', train: 'train', car: 'taxi'
 };
+const AVOID_PRESETS = [
+  { id: '豬肉', local: 'Tôi không ăn thịt heo', icon: 'pork' },
+  { id: '牛肉', local: 'Tôi không ăn thịt bò', icon: 'beef' },
+  { id: '花生', local: 'Tôi dị ứng với đậu phộng', icon: 'peanut' },
+  { id: '海鮮', local: 'Tôi không ăn hải sản', icon: 'seafood' },
+  { id: '香菜', local: 'Tôi không ăn rau mùi', icon: 'herb' },
+  { id: '蛋', local: 'Tôi không ăn trứng', icon: 'egg' },
+  { id: '奶製品', local: 'Tôi không ăn sữa', icon: 'milk' },
+  { id: '不要辣', local: 'Tôi không ăn cay', icon: 'chili' }
+];
+const COUNTRY_HINTS = [
+  ['越南', /越南|河內|胡志明|峴港|會安|下龍|富國|內排|芽莊|大叻|Hà Nội|Ha Noi|Hanoi|Vietnam|Sài Gòn|Saigon|Da Nang|Đà Nẵng|Hạ Long|Phú Quốc|Nội Bài/gi],
+  ['日本', /日本|東京|大阪|京都|奈良|沖繩|北海道|Tokyo|Osaka|Kyoto|Japan/gi],
+  ['韓國', /韓國|首爾|釜山|濟州|Seoul|Busan|Korea/gi],
+  ['泰國', /泰國|曼谷|清邁|普吉|Bangkok|Thailand|Chiang Mai/gi],
+  ['台灣', /台灣|臺灣|台北|臺北|高雄|台中|臺中|台南|臺南/gi],
+  ['香港', /香港|Hong Kong/gi],
+  ['新加坡', /新加坡|Singapore/gi],
+  ['法國', /法國|巴黎|Paris|France/gi],
+  ['義大利', /義大利|意大利|羅馬|米蘭|Rome|Italy/gi],
+  ['美國', /美國|紐約|洛杉磯|New York|Los Angeles|\bUSA\b/gi],
+  ['英國', /英國|倫敦|London|United Kingdom|\bUK\b/gi]
+];
+
+function modeIdOf(tr) {
+  if (!tr) return 'taxi';
+  if (LEGACY_TRANSIT[tr.mode]) return LEGACY_TRANSIT[tr.mode];
+  const t = `${tr.mode || ''} ${tr.note || ''}`;
+  const rules = [
+    ['walk', /步行|走路|徒步|\bwalk\b/i],
+    ['plane', /飛機|航班|飛行|\bplane\b|\bflight\b/i],
+    ['boat', /船|渡輪|ferry|\bboat\b/i],
+    ['bus', /公車|巴士|大眾|\bbus\b/i],
+    ['train', /火車|電車|地鐵|捷運|高鐵|\btrain\b|metro|subway|\brail\b/i],
+    ['scooter', /機車|摩托|scooter|motor/i],
+    ['taxi', /計程|出租|開車|汽車|\btaxi\b|\buber\b|\bgrab\b|\bcar\b/i]
+  ];
+  for (const [id, re] of rules) if (re.test(t)) return id;
+  return 'taxi';
+}
+function modeLabel(id) {
+  return (TRANSIT_MODES.find(m => m.id === id) || TRANSIT_MODES[0]).label;
+}
+function formatLegDuration(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (/^\d+(\.\d+)?$/.test(s)) return `約 ${s} 分鐘`;
+  const plain = s.match(/^(\d+(?:\.\d+)?)\s*分鐘$/);
+  if (plain) return `約 ${plain[1]} 分鐘`;
+  return s;
+}
+function legCaption(tr, fromName, toName) {
+  const bits = [];
+  const note = String(tr?.note || '').trim();
+  if (tr?.mode === 'flight' && !note.includes('航廈')) bits.push('航廈動線');
+  if (note) bits.push(note);
+  else if (tr?.mode === 'public') bits.push('大眾運輸');
+  else if (!bits.length && fromName && toName) bits.push(`${fromName} → ${toName}`);
+  const dur = formatLegDuration(tr?.duration);
+  if (dur) bits.push(dur);
+  if (!bits.length) bits.push(modeLabel(modeIdOf(tr)));
+  return bits.join(' · ');
+}
+function inferCountry(trip) {
+  const blob = [
+    trip?.title,
+    trip?.country,
+    ...(Object.values(trip?.dayTitles || {})),
+    ...((trip?.places || []).flatMap(p => [p?.name, p?.address, p?.city, p?.note])),
+    ...((trip?.events || []).flatMap(e => [e?.name, e?.address, e?.note, e?.fromAirport, e?.toAirport, e?.flightCode]))
+  ].filter(Boolean).join('\n');
+  let best = '';
+  let bestN = 0;
+  COUNTRY_HINTS.forEach(([name, re]) => {
+    const n = (blob.match(re) || []).length;
+    if (n > bestN) { bestN = n; best = name; }
+  });
+  return best;
+}
+function tripCountryOf(trip) {
+  const set = String(trip?.country || '').trim();
+  if (set) return set;
+  return inferCountry(trip) || '越南';
+}
+function platformInfo(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return { name: '', known: false, ok: false };
+  if (!/^https:\/\//i.test(raw)) return { name: '', known: false, ok: false, invalid: true };
+  let host = '';
+  try { host = new URL(raw).hostname.replace(/^www\./i, '').toLowerCase(); }
+  catch (e) { return { name: '', known: false, ok: false, invalid: true }; }
+  const known = [
+    ['Agoda', h => h === 'agoda.com' || h.endsWith('.agoda.com')],
+    ['Booking.com', h => h === 'booking.com' || h.endsWith('.booking.com')],
+    ['Klook', h => h === 'klook.com' || h.endsWith('.klook.com')],
+    ['KKday', h => h === 'kkday.com' || h.endsWith('.kkday.com')],
+    ['Trip.com', h => h === 'trip.com' || h.endsWith('.trip.com')]
+  ];
+  const hit = known.find(([, test]) => test(host));
+  if (hit) return { name: hit[0], known: true, ok: true, host };
+  const airlines = {
+    'vietnamairlines.com': 'Vietnam Airlines',
+    'evaair.com': '長榮航空',
+    'china-airlines.com': '中華航空',
+    'cathaypacific.com': '國泰航空',
+    'starlux-airlines.com': '星宇航空',
+    'koreanair.com': '大韓航空',
+    'jal.co.jp': '日本航空',
+    'ana.co.jp': '全日空',
+    'singaporeair.com': '新加坡航空',
+    'thaiairways.com': 'Thai Airways'
+  };
+  const airHost = Object.keys(airlines).find(h => host === h || host.endsWith('.' + h));
+  if (airHost) return { name: airlines[airHost], known: true, ok: true, host, airline: true };
+  if (/air(line|ways)?/.test(host)) return { name: host, known: true, ok: true, host, airline: true };
+  return { name: host, known: false, ok: true, host };
+}
+function eventShortName(ev, placeMap) {
+  if (!ev) return '';
+  if (ev.kind === 'flight') {
+    const code = ev.flightCode ? `航班 ${ev.flightCode}` : '航班';
+    return code;
+  }
+  return ev.name || placeMap?.[ev.placeId]?.name || '下一站';
+}
+
+function ModeIcon({ id, className }) {
+  const cls = className || 'w-4 h-4';
+  const props = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', className: cls, 'aria-hidden': true };
+  if (id === 'walk') {
+    return (<svg {...props}><circle cx="12" cy="4.6" r="1.5" fill="currentColor" stroke="none" /><path d="M10 21l1.2-6.2L9 12.2 11 8.5h2.2l1.6 3.2 2.2 1.3M11.2 14.8 13 21" /></svg>);
+  }
+  if (id === 'plane') {
+    return (<svg {...props}><path d="M3 13h6l6.5-7 1.6 1.2L13.2 13H20l1 1.6-1 1.6h-6.8l3.9 5.6-1.6 1.2L10 16.2H3l-1-1.6L3 13z" /></svg>);
+  }
+  if (id === 'boat') {
+    return (<svg {...props}><path d="M4 16c1.6 1.3 2.8 1.3 4.4 0s2.8-1.3 4.4 0 2.8 1.3 4.4 0 2.6-1.3 4.2 0" /><path d="M6.5 15.5 8.2 9h5.2l1.2 6.5" /><path d="M13.4 9V5.2h2.6" /></svg>);
+  }
+  if (id === 'bus') {
+    return (<svg {...props}><rect x="5" y="4" width="14" height="12" rx="2" /><path d="M5 11h14M8 20v-2.2M16 20v-2.2" /><circle cx="8.2" cy="16.2" r="1" fill="currentColor" stroke="none" /><circle cx="15.8" cy="16.2" r="1" fill="currentColor" stroke="none" /></svg>);
+  }
+  if (id === 'train') {
+    return (<svg {...props}><rect x="6.5" y="3" width="11" height="13" rx="3" /><path d="M6.5 10.5h11M9 20l3-3.6L15 20" /><circle cx="9.4" cy="13.2" r=".8" fill="currentColor" stroke="none" /><circle cx="14.6" cy="13.2" r=".8" fill="currentColor" stroke="none" /></svg>);
+  }
+  if (id === 'scooter') {
+    return (<svg {...props}><circle cx="7" cy="17" r="2.1" /><circle cx="17.2" cy="17" r="2.1" /><path d="M9 17h5.2M14.2 17 16.2 8h3M16.2 8l-2.8 1.2" /></svg>);
+  }
+  return (<svg {...props}><path d="M4 16h16l-1.2-4.2a2 2 0 0 0-1.9-1.4H7.2a2 2 0 0 0-1.9 1.3L4 16z" /><path d="M7.2 10.4 8.4 7h7.2l1.2 3.4" /><circle cx="7.2" cy="16.2" r=".9" fill="currentColor" stroke="none" /><circle cx="16.8" cy="16.2" r=".9" fill="currentColor" stroke="none" /></svg>);
+}
+
+function OrderIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className || 'w-3.5 h-3.5'} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 5h5v5" /><path d="M19 5 10 14" /><path d="M16 13.5V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h5.5" />
+    </svg>
+  );
+}
+
+function OrderLinkButton({ url }) {
+  if (!/^https:\/\//i.test(String(url || '').trim())) return null;
+  return (
+    <a
+      href={url}
+      className="w-7 h-7 rounded-full bg-white border border-line text-accent grid place-items-center shrink-0"
+      aria-label="開啟訂單"
+      title="開啟訂單"
+    >
+      <OrderIcon />
+    </a>
+  );
+}
+
+function AvoidPictogram({ kind }) {
+  const props = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', className: 'w-7 h-7' };
+  let body = null;
+  if (kind === 'pork') body = (<svg {...props}><circle cx="12" cy="13" r="5.2" /><circle cx="10" cy="12.2" r=".7" fill="currentColor" stroke="none" /><circle cx="14" cy="12.2" r=".7" fill="currentColor" stroke="none" /><path d="M11 15.2h2M8.2 9.2 7 7.2M15.8 9.2 17 7.2" /><circle cx="8.4" cy="10" r="1.1" /><circle cx="15.6" cy="10" r="1.1" /></svg>);
+  else if (kind === 'beef') body = (<svg {...props}><path d="M5 10c1.2-3 3-4.2 4.6-3.2C11 5 13 5 14.4 6.8 16 5.8 17.8 7 19 10" /><ellipse cx="12" cy="14.5" rx="5" ry="4" /><circle cx="10" cy="14" r=".6" fill="currentColor" stroke="none" /><circle cx="14" cy="14" r=".6" fill="currentColor" stroke="none" /><path d="M11.2 16.2h1.6" /></svg>);
+  else if (kind === 'peanut') body = (<svg {...props}><path d="M9 14.5c-1.6 1.8-1.4 4 1 4.6 1.2.3 2.2-.4 2.6-1.4.5 1.2 1.8 1.8 3 .1 1.6-2.2-.2-4.6-1.8-5.6 1.2-1.6.6-3.8-1.4-4.4-1.6-.5-3 .6-3.4 2-.8-1.2-2.6-1.4-3.6-.2-1.2 1.4-.4 3.4 1.2 4z" /></svg>);
+  else if (kind === 'seafood') body = (<svg {...props}><path d="M4 13c2-4 6-6 10-4 2 1 3.2 2.4 4 4" /><path d="M6 14c2 2.4 5 3.2 8 2.2 2-.6 3.4-1.6 4.5-3" /><path d="M14 8.5c.6-1.6 1.6-2.4 3-2.6M8 12.2h.1M11 11.4h.1" /></svg>);
+  else if (kind === 'herb') body = (<svg {...props}><path d="M12 21V10" /><path d="M12 15c-3.2.2-5.2-1.4-6-4 2.4.2 4.4 1.4 6 4z" /><path d="M12 12c3-.2 5-2 5.6-4.6-2.2.4-4 1.8-5.6 4.6z" /><path d="M12 17.5c-2.4 0-4.2-1-5-2.8 2 .6 3.6 1.4 5 2.8z" /></svg>);
+  else if (kind === 'egg') body = (<svg {...props}><path d="M12 20c3.2 0 5-2.4 5-5.6C17 10 14.8 4.5 12 4.5S7 10 7 14.4C7 17.6 8.8 20 12 20z" /></svg>);
+  else if (kind === 'milk') body = (<svg {...props}><path d="M8 9.5h8l-.8 9.2a2 2 0 0 1-2 1.8H10.8a2 2 0 0 1-2-1.8L8 9.5z" /><path d="M9 7.2h6l-.6 2.3H9.6L9 7.2z" /><path d="M10 4.8h4" /></svg>);
+  else if (kind === 'chili') body = (<svg {...props}><path d="M8 14.5c0-4 2.2-7 5.2-8.2.4 2.2-.2 3.6-1.4 4.6 2.6.2 4.6 2 4.6 4.6 0 2.4-2 4.2-4.4 4.2-2.8 0-4-2.4-4-5.2z" /><path d="M13.2 6.2c.8-1.6 2.2-2.2 3.4-2" /></svg>);
+  else body = (<svg {...props}><path d="M8 16.5 16 8" /><circle cx="9" cy="9" r="2.2" /><circle cx="15" cy="15" r="2.2" /></svg>);
+  return (
+    <div className="w-14 h-14 rounded-full bg-deep text-[#e1bc83] grid place-items-center shrink-0">
+      {body}
+    </div>
+  );
+}
 
 // 預設行前待辦與行李範本（當舊行程尚未建立清單時可一鍵帶入或初始化）
 const DEFAULT_TODO_LIST = [
@@ -195,6 +391,7 @@ window.TripWorkspace = function TripWorkspace({
   const [editTotalDays, setEditTotalDays] = useState(3);
   const [editDaySubtitle, setEditDaySubtitle] = useState('');
   const [editMembersText, setEditMembersText] = useState('');
+  const foodTriedRef = useRef('');
 
   // 💰 旅行帳單：新增額外開銷視窗與表單
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
@@ -217,6 +414,22 @@ window.TripWorkspace = function TripWorkspace({
   const [exportShowCost, setExportShowCost] = useState(true);
   const [exportShowNote, setExportShowNote] = useState(true);
   const [isExportingImg, setIsExportingImg] = useState(false);
+
+  const [showScanSheet, setShowScanSheet] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const [foodPack, setFoodPack] = useState(null);
+  const [foodQuery, setFoodQuery] = useState('');
+  const [foodFavOnly, setFoodFavOnly] = useState(false);
+  const [showAvoidSheet, setShowAvoidSheet] = useState(false);
+  const [avoidDraft, setAvoidDraft] = useState([]);
+  const [avoidCustomDraft, setAvoidCustomDraft] = useState('');
+  const [showDictSheet, setShowDictSheet] = useState(false);
+  const [dictDraft, setDictDraft] = useState({});
+  const [dictBusy, setDictBusy] = useState(false);
+  const [dishDetail, setDishDetail] = useState(null);
+  const [staffView, setStaffView] = useState(null);
+  const [editCountry, setEditCountry] = useState('');
 
   // Leaflet 地圖與匯出畫布 Ref
   const mapContainerRef = useRef(null);
@@ -287,13 +500,15 @@ window.TripWorkspace = function TripWorkspace({
 
       const trCost = Number(ev.transitToNext?.cost || 0) || 0;
       if (trCost > 0) {
-        const tm = TRANSIT_META[ev.transitToNext?.mode] || TRANSIT_META.taxi;
+        const modeName = modeLabel(modeIdOf(ev.transitToNext));
+        const legacyNote = ev.transitToNext?.mode === 'flight' ? '航廈動線' : (ev.transitToNext?.mode === 'public' ? '大眾運輸' : '');
+        const trNote = String(ev.transitToNext?.note || legacyNote || '').trim();
         allRecords.push({
           id: `tr_${ev.id}`,
           source: 'transit',
           rawEventId: ev.id,
           dayLabel: `D-${ev.day || 1}`,
-          title: `${tm.icon} ${tm.label} (${itemName} 出發)`,
+          title: `${modeName}${trNote ? ' · ' + trNote : ''} (${itemName} 出發)`,
           category: '交通車資',
           twd: trCost,
           payer: ev.transitToNext?.payer || ev.payer || members[0],
@@ -577,6 +792,42 @@ window.TripWorkspace = function TripWorkspace({
     }
   }, [subTab]);
 
+  const resolvedCountry = tripCountryOf(trip);
+  const avoidList = useMemo(() => {
+    const preset = (trip?.avoids || []).filter(id => AVOID_PRESETS.some(a => a.id === id));
+    const custom = (trip?.avoidCustom || []).map(x => String(x).trim()).filter(x => x && !AVOID_PRESETS.some(a => a.id === x));
+    return [...preset, ...custom];
+  }, [trip?.avoids, trip?.avoidCustom]);
+
+  // 字典只在打開「當地美食」時下載。失敗就安靜改用內建越南字典。
+  useEffect(() => {
+    if (subTab !== 'food') return undefined;
+    let cancelled = false;
+    const country = resolvedCountry;
+    (async () => {
+      try {
+        const api = await window.loadNanaFood();
+        if (cancelled) return;
+        const cached = api.packFromCache(country);
+        setFoodPack(cached);
+        if (cached.cached) return;
+        const stamp = country + '|' + (api.sheetLink(country) || '');
+        if (foodTriedRef.current === stamp) return;
+        foodTriedRef.current = stamp;
+        if (!api.sheetLink(country)) return;
+        try {
+          const fresh = await api.refreshCountry(country);
+          if (!cancelled) setFoodPack(fresh);
+        } catch (e) {
+          if (!cancelled) setFoodPack(api.packFromCache(country));
+        }
+      } catch (e) {
+        if (!cancelled && showToast) showToast('字典暫時讀不到，請稍後再打開當地美食');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [subTab, resolvedCountry]);
+
   // 產生當天 Google Maps 一鍵多點導航網址
   const googleMapsDayRouteUrl = useMemo(() => {
     const validStops = currentDayEvents
@@ -625,6 +876,7 @@ window.TripWorkspace = function TripWorkspace({
     setEditTotalDays(totalDays);
     setEditDaySubtitle(currentDaySubtitle);
     setEditMembersText(membersList.join('\n'));
+    setEditCountry(String(trip.country || '').trim() || inferCountry(trip) || '');
     setShowTitleModal(true);
   };
 
@@ -642,6 +894,7 @@ window.TripWorkspace = function TripWorkspace({
       start: editStartDate,
       days: Math.max(1, Number(editTotalDays) || 1),
       members: parsedMembers.length > 0 ? parsedMembers : ['娜娜'],
+      country: editCountry.trim(),
       dayTitles: nextDayTitles
     });
     setShowTitleModal(false);
@@ -822,7 +1075,9 @@ window.TripWorkspace = function TripWorkspace({
       cost: ev.cost ?? p.cost ?? 0,
       payer: ev.payer || p.payer || membersList[0],
       lat: ev.lat || p.lat || null,
-      lng: ev.lng || p.lng || null
+      lng: ev.lng || p.lng || null,
+      bookingUrl: ev.bookingUrl || '',
+      orderNo: ev.orderNo || ''
     });
   };
 
@@ -830,6 +1085,11 @@ window.TripWorkspace = function TripWorkspace({
   const handleSaveEditEvent = async (e) => {
     e.preventDefault();
     if (!editingEvent) return;
+    const link = String(editingEvent.bookingUrl || '').trim();
+    if (link && !/^https:\/\//i.test(link)) {
+      if (showToast) showToast('訂單連結請用 https，iPhone 才能打開對應的 App');
+      return;
+    }
     setIsSavingEdit(true);
 
     let nextLat = editingEvent.lat;
@@ -858,7 +1118,9 @@ window.TripWorkspace = function TripWorkspace({
         lat: nextLat,
         lng: nextLng,
         cost: Number(editingEvent.cost) || 0,
-        payer: editingEvent.payer || membersList[0]
+        payer: editingEvent.payer || membersList[0],
+        bookingUrl: link,
+        orderNo: String(editingEvent.orderNo || '').trim()
       };
     });
 
@@ -1071,9 +1333,9 @@ window.TripWorkspace = function TripWorkspace({
             }
           }
           if (idx < evs.length - 1 && ev.transitToNext) {
-            const tm = TRANSIT_META[ev.transitToNext.mode] || TRANSIT_META.taxi;
             const trCost = Number(ev.transitToNext.cost || 0);
-            lines.push(`   ⇣ ${tm.icon} ${tm.label} (${ev.transitToNext.duration || ''})${exportShowCost && trCost > 0 ? ` · 車資NT$${trCost}` : ''}`);
+            const nextEv = evs[idx + 1];
+            lines.push(`   ⇣ ${legCaption(ev.transitToNext, eventShortName(ev, placeMap), eventShortName(nextEv, placeMap))}${exportShowCost && trCost > 0 ? ` · 車資NT$${trCost}` : ''}`);
           }
         });
       }
@@ -1118,6 +1380,185 @@ window.TripWorkspace = function TripWorkspace({
     return [...fromSaved, ...fromDict, ...onlineSuggestions].slice(0, 6);
   }, [gName, allSavedPlaces, onlineSuggestions]);
 
+  const openTransitEditor = (ev, nextEv) => {
+    const tr = ev.transitToNext || { mode: 'taxi', duration: '15 分鐘', cost: 0, note: '' };
+    let note = tr.note || '';
+    if (tr.mode === 'flight' && !String(note).includes('航廈')) note = note ? `航廈動線 · ${note}` : '航廈動線';
+    if (tr.mode === 'public' && !note) note = '大眾運輸';
+    setEditingTransitEv({
+      id: ev.id,
+      mode: modeIdOf(tr),
+      duration: tr.duration || '15 分鐘',
+      cost: tr.cost || 0,
+      payer: tr.payer || ev.payer || membersList[0],
+      note,
+      fromName: eventShortName(ev, placeMap),
+      toName: eventShortName(nextEv, placeMap)
+    });
+  };
+
+  const openAvoidSheet = () => {
+    setAvoidDraft([...(trip?.avoids || [])]);
+    setAvoidCustomDraft((trip?.avoidCustom || []).join('、'));
+    setShowAvoidSheet(true);
+  };
+
+  const saveAvoids = (e) => {
+    e.preventDefault();
+    const custom = [...new Set(avoidCustomDraft.split(/\n|[、,，]/).map(s => s.trim()).filter(Boolean))];
+    const avoids = AVOID_PRESETS.map(a => a.id).filter(id => avoidDraft.includes(id));
+    onUpdateTrip({ ...trip, avoids, avoidCustom: custom });
+    setShowAvoidSheet(false);
+    if (showToast) showToast('已記下不吃的食材');
+  };
+
+  const openStaffForAvoids = () => {
+    const preset = (trip?.avoids || []).map(id => AVOID_PRESETS.find(a => a.id === id)).filter(Boolean)
+      .map(a => ({ icon: a.icon, local: a.local, zh: a.id }));
+    const custom = (trip?.avoidCustom || []).map(text => ({ icon: 'custom', local: text, zh: '自訂' }));
+    const vietnam = !trip?.country || resolvedCountry === '越南';
+    setStaffView({
+      title: '給店員看',
+      blocks: [...preset, ...custom],
+      foot: vietnam
+        ? '存在這支手機裡，沒有網路也能打開。範例 · 越南文'
+        : '存在這支手機裡，沒有網路也能打開。預設句子是越南文，自訂項目只顯示你打的字。',
+      sample: vietnam
+    });
+  };
+
+  const openDishStaff = (dish) => {
+    if (!dish) return;
+    setStaffView({
+      title: '給店員看',
+      blocks: [{ icon: 'dish', local: dish.original, zh: dish.zh || '' }],
+      foot: '把這一行轉過去給店員看。沒有網路也能打開。',
+      sample: !!(foodPack && foodPack.sample)
+    });
+  };
+
+  const toggleFoodFav = (dish) => {
+    if (!dish) return;
+    const key = `${resolvedCountry}\t${dish.original}`;
+    const curr = Array.isArray(trip?.foodFavs) ? trip.foodFavs : [];
+    const next = curr.includes(key) ? curr.filter(x => x !== key) : [...curr, key];
+    onUpdateTrip({ ...trip, foodFavs: next });
+  };
+
+  const isFoodFav = (dish) => {
+    const key = `${resolvedCountry}\t${dish.original}`;
+    return (trip?.foodFavs || []).includes(key);
+  };
+
+  const openDictSheet = async () => {
+    try {
+      const api = await window.loadNanaFood();
+      const stored = api.readSheets();
+      const draft = {};
+      api.DICT_COUNTRIES.forEach(c => {
+        draft[c] = Object.prototype.hasOwnProperty.call(stored, c) ? stored[c] : (api.DEFAULT_SHEETS[c] || '');
+      });
+      Object.keys(stored).forEach(c => { if (draft[c] == null) draft[c] = stored[c]; });
+      setDictDraft(draft);
+      setShowDictSheet(true);
+    } catch (e) {
+      if (showToast) showToast('字典設定暫時打不開');
+    }
+  };
+
+  const saveDictDraft = () => {
+    if (!window.NanaFood) return;
+    const clean = {};
+    Object.entries(dictDraft || {}).forEach(([k, v]) => {
+      const value = String(v || '').trim();
+      if (value || Object.prototype.hasOwnProperty.call(window.NanaFood.readSheets(), k)) clean[k] = value;
+    });
+    window.NanaFood.writeSheets(clean);
+  };
+
+  const handleRefreshDict = async () => {
+    setDictBusy(true);
+    try {
+      const api = await window.loadNanaFood();
+      const link = showDictSheet
+        ? String((dictDraft || {})[resolvedCountry] ?? '').trim()
+        : api.sheetLink(resolvedCountry);
+      if (showDictSheet) saveDictDraft();
+      const fresh = await api.refreshCountry(resolvedCountry, link);
+      setFoodPack(fresh);
+      if (showToast) showToast(`已更新 ${fresh.dishes.length} 道菜`);
+    } catch (err) {
+      const api = window.NanaFood;
+      if (api) setFoodPack(api.packFromCache(resolvedCountry));
+      if (showToast) showToast('讀不到試算表，先用手機裡的字典');
+    } finally {
+      setDictBusy(false);
+    }
+  };
+
+  const handleScanFile = async (file) => {
+    if (!file) return;
+    setShowScanSheet(false);
+    setScanBusy(true);
+    setScanResult(null);
+    try {
+      const api = await window.loadNanaFood();
+      const pack = foodPack && foodPack.country === resolvedCountry ? foodPack : api.packFromCache(resolvedCountry);
+      if (!foodPack) setFoodPack(pack);
+      const canvas = await api.downscale(file);
+      const photo = canvas.toDataURL('image/jpeg', 0.72);
+      const text = await api.recognize(canvas, api.ocrLangFor(resolvedCountry));
+      setScanResult({ photo, text, pack, result: api.matchLines(text, pack.dishes) });
+    } catch (err) {
+      if (showToast) showToast(err.message || '辨識失敗');
+    } finally {
+      setScanBusy(false);
+    }
+  };
+
+  const foodDishes = useMemo(() => {
+    const api = window.NanaFood;
+    const list = (foodPack && foodPack.dishes) || [];
+    const filtered = api ? api.searchDishes(list, foodQuery) : list;
+    return foodFavOnly ? filtered.filter(isFoodFav) : filtered;
+  }, [foodPack, foodQuery, foodFavOnly, trip?.foodFavs, resolvedCountry]);
+
+  const renderDish = (d, opts = {}) => {
+    const hits = window.NanaFood ? window.NanaFood.dishHits(d, avoidList) : [];
+    const fav = isFoodFav(d);
+    return (
+      <article key={d.original + (opts.keyExtra || '')} className="bg-white border border-line rounded-2xl p-3.5 shadow-sm">
+        <div className="flex items-start gap-2">
+          <button type="button" onClick={() => setDishDetail(d)} className="min-w-0 flex-1 text-left">
+            <h3 className="text-[15px] font-extrabold text-deep leading-snug">{d.zh || d.original}</h3>
+            <p className="text-[12px] text-muted mt-0.5">{d.original}</p>
+            {d.desc ? <p className="text-[12px] text-ink mt-1 leading-relaxed">{d.desc}</p> : null}
+          </button>
+          {opts.star && (
+            <button type="button" onClick={() => toggleFoodFav(d)} className={`text-base leading-none px-1 ${fav ? 'text-[#c4923e]' : 'text-[#b7c4c0]'}`} aria-label={fav ? '取消收藏' : '收藏'}>
+              {fav ? '★' : '☆'}
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1 mt-2">
+          {d.spice ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-paper border border-line text-muted">{d.spice}</span> : null}
+          {(d.tags || []).map(tag => (
+            <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-paper border border-line text-muted">{tag}</span>
+          ))}
+          {(d.ingredients || []).map(ing => {
+            const bad = hits.includes(ing) || ((ing === '辣' || ing === '辣椒') && hits.includes('辣'));
+            return <span key={ing} className={`text-[10px] px-2 py-0.5 rounded-full border ${bad ? 'bg-red-50 text-red-600 border-red-200' : 'bg-paper text-muted border-line'}`}>含{ing}</span>;
+          })}
+        </div>
+        {hits.length > 0 && (
+          <div className="mt-2 text-[11px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl px-2.5 py-1.5">含有你不吃的食材 · {hits.join('、')}</div>
+        )}
+      </article>
+    );
+  };
+
+  const localWord = resolvedCountry === '越南' ? '越文' : '在地文字';
+
   return (
     <div className="space-y-4 pb-12 w-full max-w-full overflow-x-hidden">
       
@@ -1134,6 +1575,18 @@ window.TripWorkspace = function TripWorkspace({
         </button>
 
         <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => { setScanResult(null); setShowScanSheet(true); }}
+            className="w-10 h-10 rounded-full bg-white hover:bg-soft border border-line flex items-center justify-center text-deep shadow-sm transition-transform active:scale-95"
+            title="掃描菜單"
+            aria-label="掃描菜單"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" d="M7 4H5a1 1 0 0 0-1 1v2M17 4h2a1 1 0 0 1 1 1v2M7 20H5a1 1 0 0 1-1-1v-2M17 20h2a1 1 0 0 0 1-1v-2" />
+              <circle cx="12" cy="12" r="2.4" />
+            </svg>
+          </button>
           {/* 紙飛機圖示：一鍵匯出漂亮行程表 (PDF / 長圖 / LINE) */}
           <button
             onClick={() => setShowExportModal(true)}
@@ -1189,12 +1642,13 @@ window.TripWorkspace = function TripWorkspace({
         </div>
       </div>
 
-      {/* 3️⃣ 底線式三大分頁切換列：行程 ｜ 旅行帳單 ｜ 行李清單（純文字，不顯示金額與數字） */}
-      <div className="border-b border-line flex items-center gap-8 px-2 pt-1">
+      {/* 3️⃣ 底線式分頁：行程 ｜ 旅行帳單 ｜ 行李清單 ｜ 當地美食 */}
+      <div className="border-b border-line flex items-center gap-5 sm:gap-8 px-1 pt-1 overflow-x-auto hide-scrollbar">
         {[
           { key: 'itinerary', label: '行程' },
           { key: 'bill',      label: '旅行帳單' },
-          { key: 'checklist', label: '行李清單' }
+          { key: 'checklist', label: '行李清單' },
+          { key: 'food',      label: '當地美食' }
         ].map(tab => {
           const active = subTab === tab.key;
           return (
@@ -1224,7 +1678,6 @@ window.TripWorkspace = function TripWorkspace({
           <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
             {dayNumbers.map(dNum => {
               const isActive = dNum === currentDay;
-              const count = getEventsForDay(dNum).length;
               return (
                 <button
                   key={dNum}
@@ -1238,9 +1691,6 @@ window.TripWorkspace = function TripWorkspace({
                   <span>D-{dNum}</span>
                   <span className={`text-[10px] font-semibold ${isActive ? 'text-[#e3c38f]' : 'text-muted'}`}>
                     {formatDayDateLabel(trip.start, dNum)}
-                  </span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-paper text-muted'}`}>
-                    {count}
                   </span>
                 </button>
               );
@@ -1276,11 +1726,9 @@ window.TripWorkspace = function TripWorkspace({
                   const catMeta = CATEGORY_META[itemCatKey] || CATEGORY_META.spot;
                   const itemAddress = ev.address || p.address || '';
                   const itemNote = ev.note ?? p.note ?? '';
-                  const itemCost = Number(ev.cost ?? p.cost ?? 0);
                   const savedUid = ev.savedUid || p.savedUid || '';
 
                   const tr = ev.transitToNext || { mode: 'taxi', duration: '車程約 15 分鐘', cost: 0, note: '' };
-                  const trMeta = TRANSIT_META[tr.mode] || TRANSIT_META.taxi;
 
                   return (
                     <React.Fragment key={ev.id}>
@@ -1320,14 +1768,10 @@ window.TripWorkspace = function TripWorkspace({
                                 <strong className="text-xs sm:text-sm font-extrabold text-sky-950 break-words">
                                   {ev.flightCode || '航班資訊'}
                                 </strong>
-                                {itemCost > 0 && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
-                                    💰 NT$ {itemCost.toLocaleString()}
-                                  </span>
-                                )}
                               </div>
 
                               <div className="flex items-center gap-1 shrink-0">
+                                <OrderLinkButton url={ev.bookingUrl} />
                                 <button
                                   onClick={() => handleOpenEditModal(ev)}
                                   className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white hover:bg-sky-100 text-sky-900 border border-sky-200 whitespace-nowrap"
@@ -1373,11 +1817,6 @@ window.TripWorkspace = function TripWorkspace({
                                 <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border whitespace-nowrap ${catMeta.badgeCls}`}>
                                   {catMeta.icon} {catMeta.label}
                                 </span>
-                                {itemCost > 0 && (
-                                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
-                                    💰 NT$ {itemCost.toLocaleString()}
-                                  </span>
-                                )}
                                 <button
                                   onClick={() => onJumpToSaved && onJumpToSaved(itemName, savedUid)}
                                   className="text-[11px] font-bold text-accent hover:underline inline-flex items-center gap-0.5 whitespace-nowrap"
@@ -1387,6 +1826,7 @@ window.TripWorkspace = function TripWorkspace({
                               </div>
 
                               <div className="flex items-center gap-1 shrink-0">
+                                <OrderLinkButton url={ev.bookingUrl} />
                                 <button
                                   onClick={() => handleOpenEditModal(ev)}
                                   className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-paper hover:bg-soft text-deep border border-line transition-colors whitespace-nowrap"
@@ -1438,32 +1878,26 @@ window.TripWorkspace = function TripWorkspace({
                         )}
                       </div>
 
-                      {/* 景點與景點之間的「🚕 交通方式與車資」連接器 */}
                       {!isLast && (
-                        <div className="grid grid-cols-[52px_16px_minmax(0,1fr)] sm:grid-cols-[68px_16px_minmax(0,1fr)] gap-2 sm:gap-3 items-center w-full py-0.5">
+                        <div className="grid grid-cols-[52px_16px_minmax(0,1fr)] sm:grid-cols-[68px_16px_minmax(0,1fr)] gap-2 sm:gap-3 items-center w-full">
                           <div />
-                          <div />
-                          <div className="min-w-0">
+                          <div className="relative h-9">
                             <button
-                              onClick={() => setEditingTransitEv({
-                                id: ev.id,
-                                mode: tr.mode || 'taxi',
-                                duration: tr.duration || '車程約 15 分鐘',
-                                cost: tr.cost || 0,
-                                payer: tr.payer || ev.payer || membersList[0],
-                                note: tr.note || ''
-                              })}
-                              className="w-full sm:w-auto text-left inline-flex flex-wrap items-center gap-x-2 gap-y-1 px-3.5 py-2 rounded-2xl bg-white hover:bg-soft border border-dashed border-accent/60 text-xs font-bold text-ink shadow-sm transition-all"
+                              type="button"
+                              onClick={() => openTransitEditor(ev, currentDayEvents[idx + 1])}
+                              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#e7f3ee] border-2 border-white text-accent shadow-sm grid place-items-center"
+                              aria-label={`編輯${modeLabel(modeIdOf(tr))}`}
                             >
-                              <span className="whitespace-nowrap">{trMeta.icon} {trMeta.label}</span>
-                              <span className="text-muted whitespace-nowrap">· {tr.duration || '設定時間'}</span>
-                              <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] whitespace-nowrap">
-                                💰 車資 NT$ {Number(tr.cost || 0).toLocaleString()}
-                              </span>
-                              {tr.note && <span className="text-muted font-normal break-words">({tr.note})</span>}
-                              <span className="text-accent underline text-[11px] whitespace-nowrap ml-auto sm:ml-1">✎ 編輯交通</span>
+                              <ModeIcon id={modeIdOf(tr)} className="w-4 h-4" />
                             </button>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => openTransitEditor(ev, currentDayEvents[idx + 1])}
+                            className="min-w-0 text-left text-[12px] leading-snug text-muted font-medium py-1"
+                          >
+                            {legCaption(tr, eventShortName(ev, placeMap), eventShortName(currentDayEvents[idx + 1], placeMap))}
+                          </button>
                         </div>
                       )}
                     </React.Fragment>
@@ -1833,6 +2267,57 @@ window.TripWorkspace = function TripWorkspace({
                 新增
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {subTab === 'food' && (
+        <div className="space-y-3 animate-fade-in pb-4">
+          <div className="editorial-card p-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-extrabold text-deep">我不吃的食材</h3>
+              <button type="button" onClick={openAvoidSheet} className="w-7 h-7 rounded-full border border-line bg-white text-deep grid place-items-center" aria-label="編輯不吃的食材">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {avoidList.length > 0 ? avoidList.map(x => (
+                <span key={x} className="px-2.5 py-1 rounded-full bg-deep text-white text-[11px] font-bold">{x}</span>
+              )) : <span className="text-[11px] text-muted">還沒設定。點鉛筆選擇豬肉、香菜或其他。</span>}
+            </div>
+            <button type="button" onClick={openStaffForAvoids} className="mt-2 text-[12px] text-muted text-left">
+              點一下，用{localWord}給店員看
+            </button>
+          </div>
+
+          <input
+            value={foodQuery}
+            onChange={e => setFoodQuery(e.target.value)}
+            placeholder="搜尋菜名，pho bo 或 河粉"
+            className="w-full h-10 rounded-full bg-white border border-line px-4 text-xs text-ink"
+            aria-label="搜尋菜名"
+          />
+          <p className="text-[11px] text-muted !mt-1.5">不用打聲調。pho bo 會對到 Phở bò。</p>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px]">
+            <div className="text-muted min-w-0">
+              <span className="font-bold text-deep">{resolvedCountry}</span>
+              {foodPack && foodPack.updatedAt && window.NanaFood ? <span> · {window.NanaFood.fmtDictTime(foodPack.updatedAt)} · 已存入手機</span> : null}
+              {foodPack && foodPack.sample ? <span className="ml-1 inline-block px-1.5 py-0.5 rounded-full bg-[#f6efe2] text-[#8a6232] font-bold">範例字典</span> : null}
+              {!foodPack ? <span> · 正在準備</span> : null}
+            </div>
+            <div className="flex items-center gap-2.5 font-bold text-accent shrink-0">
+              <button type="button" onClick={() => setFoodFavOnly(v => !v)}>{foodFavOnly ? '看全部' : '只看收藏'}</button>
+              <button type="button" onClick={openDictSheet}>字典來源</button>
+              <button type="button" onClick={handleRefreshDict} disabled={dictBusy}>{dictBusy ? '更新中' : '更新字典'}</button>
+            </div>
+          </div>
+          <div className="space-y-2.5">
+            {foodDishes.map(d => renderDish(d, { star: true }))}
+            {foodPack && foodDishes.length === 0 && (
+              <p className="text-xs text-center text-muted py-8">
+                {(foodPack.dishes || []).length ? '沒有符合的菜。' : '這個國家還沒有字典。到字典來源貼上試算表連結，再按更新字典。'}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -2331,6 +2816,48 @@ window.TripWorkspace = function TripWorkspace({
               </div>
 
               <div>
+                <label className="font-bold text-deep block mb-1.5">訂單連結</label>
+                <input
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://"
+                  value={editingEvent.bookingUrl || ''}
+                  onChange={e => setEditingEvent({ ...editingEvent, bookingUrl: e.target.value })}
+                  className="w-full h-11 bg-paper border border-line rounded-xl px-3.5 text-ink"
+                />
+                {(() => {
+                  const info = platformInfo(editingEvent.bookingUrl);
+                  if (!String(editingEvent.bookingUrl || '').trim()) return null;
+                  return (
+                    <div className="mt-2 rounded-2xl bg-[#e7f3ee] border border-[#cde4d7] px-3 py-2.5 flex items-start gap-2">
+                      <span className="w-7 h-7 rounded-full bg-white text-accent grid place-items-center shrink-0"><OrderIcon /></span>
+                      <div className="min-w-0">
+                        <strong className="text-xs text-deep block">{info.invalid ? '請用 https' : (info.name || '連結')}</strong>
+                        <p className="text-[11px] text-muted leading-relaxed mt-0.5">
+                          {info.invalid
+                            ? '請使用 https 連結，iPhone 才能用已安裝的 App 打開。'
+                            : info.known
+                              ? `從 ${info.host} 辨識。卡片上只留這個小圖示，點了就開 App 或網頁。`
+                              : '認不出的網站，圖示一樣，名稱留在這裡。'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <p className="text-[11px] text-muted leading-relaxed mt-2">也認得出 Agoda、Booking.com、Klook、KKday、Trip.com 和航空公司。認不出的網站，圖示一樣，名稱留在這裡。金額只進旅行帳單，行程卡上不顯示。</p>
+              </div>
+              <div>
+                <label className="font-bold text-deep block mb-1.5">訂單編號（選填）</label>
+                <input
+                  type="text"
+                  placeholder="例如 TRP-220518"
+                  value={editingEvent.orderNo || ''}
+                  onChange={e => setEditingEvent({ ...editingEvent, orderNo: e.target.value })}
+                  className="w-full h-11 bg-paper border border-line rounded-xl px-3.5 text-ink"
+                />
+              </div>
+
+              <div>
                 <label className="font-bold text-deep block mb-1.5">📝 備註說明（字越多框會自動加大）</label>
                 <textarea
                   rows={Math.max(3, (editingEvent.note || '').split('\n').length + Math.ceil((editingEvent.note || '').length / 26))}
@@ -2374,92 +2901,74 @@ window.TripWorkspace = function TripWorkspace({
       {/* ==========================================================================
           彈出視窗 3：編輯景點與景點間的交通方式與花費
          ========================================================================== */}
-      {editingTransitEv && (
-        <div className="fixed inset-0 bg-deep/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+      {editingTransitEv && ReactDOM.createPortal((
+        <div style={{ zIndex: 100 }} className="fixed inset-0 z-[70] flex items-end justify-center bg-deep/45" onClick={() => setEditingTransitEv(null)}>
           <form
             onSubmit={handleSaveTransit}
-            className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-line animate-fade-in"
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff' }} className="bg-white rounded-t-3xl w-full max-w-lg max-h-[88vh] overflow-y-auto shadow-2xl pb-[calc(12px+env(safe-area-inset-bottom))]"
           >
-            <div className="bg-accent text-white px-5 py-4 flex items-center justify-between">
-              <h3 className="font-serif font-bold text-base">🚕 編輯景點間交通方式與花費</h3>
-              <button type="button" onClick={() => setEditingTransitEv(null)} className="text-white/80 hover:text-white text-lg">✕</button>
+            <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+              <h3 className="font-serif font-bold text-lg text-deep">編輯交通</h3>
+              <button type="button" onClick={() => setEditingTransitEv(null)} className="text-sm font-bold text-muted px-1">取消</button>
             </div>
-
-            <div className="p-5 sm:p-6 space-y-4 text-xs">
-              <div>
-                <label className="font-bold text-deep block mb-1.5">選擇交通方式</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(TRANSIT_META).map(([k, meta]) => (
+            <div className="px-5 pb-5 space-y-4">
+              <p className="text-[12px] text-muted leading-relaxed">
+                {editingTransitEv.fromName} → {editingTransitEv.toName}。點圖示就換方式。
+              </p>
+              <div className="grid grid-cols-4 gap-3 justify-items-center">
+                {TRANSIT_MODES.map(meta => {
+                  const on = editingTransitEv.mode === meta.id;
+                  return (
                     <button
-                      key={k}
+                      key={meta.id}
                       type="button"
-                      onClick={() => setEditingTransitEv({ ...editingTransitEv, mode: k })}
-                      className={`py-2.5 px-3 rounded-xl font-bold border text-left flex items-center gap-2 transition-all ${
-                        editingTransitEv.mode === k
-                          ? 'bg-soft border-accent text-deep ring-2 ring-accent/20'
-                          : 'bg-paper border-line text-muted'
-                      }`}
+                      onClick={() => setEditingTransitEv({ ...editingTransitEv, mode: meta.id })}
+                      className="flex flex-col items-center gap-1 w-14"
                     >
-                      <span className="text-base">{meta.icon}</span>
-                      <span>{meta.label}</span>
+                      <span className={`w-11 h-11 rounded-full grid place-items-center border ${on ? 'bg-deep text-white border-deep' : 'bg-[#f4f7f4] text-muted border-transparent'}`}>
+                        <ModeIcon id={meta.id} className="w-5 h-5" />
+                      </span>
+                      <span className={`text-[11px] font-bold ${on ? 'text-deep' : 'text-muted'}`}>{meta.label}</span>
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-
-              <div className="grid grid-cols-2 gap-3 items-end">
-                <div>
-                  <label className="font-bold text-deep block mb-1.5">移動時間 / 距離</label>
-                  <input
-                    type="text"
-                    placeholder="例如：車程約 20 分鐘"
-                    value={editingTransitEv.duration || ''}
-                    onChange={e => setEditingTransitEv({ ...editingTransitEv, duration: e.target.value })}
-                    className="w-full h-11 bg-paper border border-line rounded-xl px-3.5 font-bold text-ink"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-deep block mb-1.5">💰 交通車資 (NT$)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={editingTransitEv.cost ?? 0}
-                    onChange={e => setEditingTransitEv({ ...editingTransitEv, cost: e.target.value })}
-                    className="w-full h-11 bg-paper border border-line rounded-xl px-3.5 font-bold text-amber-800"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-deep block mb-1.5">交通備註（選填）</label>
+              <label className="block">
+                <span className="text-xs font-bold text-deep block mb-1.5">時間</span>
                 <input
                   type="text"
-                  placeholder="例如：用 Grab 叫車、出站走 3 號出口"
+                  value={editingTransitEv.duration || ''}
+                  onChange={e => setEditingTransitEv({ ...editingTransitEv, duration: e.target.value })}
+                  className="w-full h-11 bg-[#f7f8f4] border border-line rounded-2xl px-3.5 text-sm text-ink"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-bold text-deep block mb-1.5">備註</span>
+                <input
+                  type="text"
                   value={editingTransitEv.note || ''}
                   onChange={e => setEditingTransitEv({ ...editingTransitEv, note: e.target.value })}
-                  className="w-full h-11 bg-paper border border-line rounded-xl px-3.5 text-ink"
+                  placeholder="例如：航廈動線"
+                  className="w-full h-11 bg-[#f7f8f4] border border-line rounded-2xl px-3.5 text-sm text-ink"
                 />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingTransitEv(null)}
-                  className="px-4 py-2.5 rounded-xl font-bold text-muted"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl font-bold bg-accent hover:bg-deep text-white shadow"
-                >
-                  儲存交通設定
-                </button>
-              </div>
+              </label>
+              <label className="block">
+                <span className="text-xs font-bold text-deep block mb-1.5">車資</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={`NT$ ${editingTransitEv.cost ?? 0}`}
+                  onChange={e => setEditingTransitEv({ ...editingTransitEv, cost: e.target.value.replace(/[^\d.]/g, '') })}
+                  className="w-full h-11 bg-[#f7f8f4] border border-line rounded-2xl px-3.5 text-sm text-ink"
+                />
+                <p className="text-[11px] text-muted leading-relaxed mt-2">車資只留在這裡，會進旅行帳單。行程上只看到圖示和這句話。</p>
+              </label>
+              <button type="submit" className="w-full h-12 rounded-2xl bg-deep text-white text-sm font-bold">儲存</button>
             </div>
           </form>
         </div>
-      )}
+      ), document.body)}
 
       {/* ==========================================================================
           彈出視窗 4：右上角鉛筆（修改旅程標題、出發日期、天數、當日副標題與旅伴名單）
@@ -2483,6 +2992,16 @@ window.TripWorkspace = function TripWorkspace({
                   onChange={e => setEditMainTitle(e.target.value)}
                   className="w-full h-11 bg-paper border border-line rounded-xl px-3.5 text-sm font-bold text-ink"
                   required
+                />
+              </div>
+              <div>
+                <label className="font-bold text-deep block mb-1.5">旅程國家（選菜單字典與掃描語言）</label>
+                <input
+                  type="text"
+                  value={editCountry}
+                  onChange={e => setEditCountry(e.target.value)}
+                  placeholder="例如：越南"
+                  className="w-full h-11 bg-paper border border-line rounded-xl px-3.5 text-sm font-bold text-ink"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3 items-end">
@@ -2840,8 +3359,7 @@ window.TripWorkspace = function TripWorkspace({
 
                                   {!isLast && tr && (
                                     <div className="pl-6 text-[11px] font-bold text-muted flex flex-wrap items-center gap-1.5">
-                                      <span>⇣ {(TRANSIT_META[tr.mode] || TRANSIT_META.taxi).icon} {(TRANSIT_META[tr.mode] || TRANSIT_META.taxi).label}</span>
-                                      <span>· {tr.duration || ''}</span>
+                                      <span>⇣ {legCaption(tr, eventShortName(ev, placeMap), eventShortName(evs[idx + 1], placeMap))}</span>
                                       {exportShowCost && Number(tr.cost) > 0 && (
                                         <span className="text-amber-700">· 車資 NT$ {Number(tr.cost).toLocaleString()}</span>
                                       )}
@@ -2865,6 +3383,234 @@ window.TripWorkspace = function TripWorkspace({
           </div>
         </div>
       )}
+
+      {showScanSheet && ReactDOM.createPortal((
+        <div style={{ zIndex: 100 }} className="fixed inset-0 z-[70] flex items-end justify-center bg-deep/45" onClick={() => setShowScanSheet(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff' }} className="bg-white rounded-t-3xl w-full max-w-lg shadow-2xl px-5 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-serif font-bold text-lg text-deep">掃描菜單</h3>
+              <button type="button" onClick={() => setShowScanSheet(false)} className="text-sm font-bold text-muted">取消</button>
+            </div>
+            <p className="text-[12px] text-muted mb-3">拍一張，或從圖庫選。辨識在這支手機上完成，照片不會上傳。</p>
+            <label className="relative block rounded-2xl border border-line bg-[#f7f8f4] px-4 py-3 mb-2">
+              <input type="file" accept="image/*" capture="environment" className="absolute inset-0 opacity-0" onChange={e => { const file = e.target.files && e.target.files[0]; e.target.value = ''; if (file) handleScanFile(file); }} />
+              <strong className="text-sm text-deep block">拍照</strong>
+              <span className="text-[11px] text-muted">對準菜單，拍下來辨識</span>
+            </label>
+            <label className="relative block rounded-2xl border border-line bg-[#f7f8f4] px-4 py-3">
+              <input type="file" accept="image/*" className="absolute inset-0 opacity-0" onChange={e => { const file = e.target.files && e.target.files[0]; e.target.value = ''; if (file) handleScanFile(file); }} />
+              <strong className="text-sm text-deep block">從圖庫選擇</strong>
+              <span className="text-[11px] text-muted">用已經拍好的菜單照片</span>
+            </label>
+          </div>
+        </div>
+      ), document.body)}
+
+      {scanBusy && ReactDOM.createPortal((
+        <div style={{ zIndex: 100 }} className="fixed inset-0 z-[70] flex items-end justify-center bg-deep/45">
+          <div style={{ background: '#fff' }} className="bg-white rounded-t-3xl w-full max-w-lg px-5 py-6 text-center">
+            <p className="text-sm font-bold text-deep">正在這支手機上辨識菜單…</p>
+            <p className="text-[11px] text-muted mt-1">第一次會下載辨識語言，之後就留在手機裡。</p>
+          </div>
+        </div>
+      ), document.body)}
+
+      {scanResult && ReactDOM.createPortal((
+        <div style={{ zIndex: 100 }} className="fixed inset-0 z-[70] flex items-end justify-center bg-deep/45" onClick={() => setScanResult(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-[#f6f8f3] rounded-t-3xl w-full max-w-lg max-h-[88vh] overflow-y-auto shadow-2xl px-4 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-serif font-bold text-lg text-deep">掃描結果</h3>
+              <button type="button" onClick={() => setScanResult(null)} className="text-sm font-bold text-muted">關閉</button>
+            </div>
+            {scanResult.photo ? <img src={scanResult.photo} alt="掃描的菜單" className="w-full max-h-36 object-cover rounded-2xl mb-3 border border-line" /> : null}
+            <p className="text-[11px] text-muted leading-relaxed mb-3">
+              {scanResult.pack && scanResult.pack.sample ? '對上內建的越南字典。' : `對上${resolvedCountry}的字典。`}
+              紅色是你不吃的食材。聲調不同也算同一道菜。
+              {scanResult.pack && scanResult.pack.sample ? <span className="ml-1 px-1.5 py-0.5 rounded-full bg-[#f6efe2] text-[#8a6232] font-bold">範例字典</span> : null}
+            </p>
+            {scanResult.result.matched.length > 0 && (
+              <div className="space-y-2 mb-3">
+                <p className="text-[11px] font-bold text-muted">對上的菜</p>
+                {scanResult.result.matched.map(d => renderDish(d, { star: false, keyExtra: 'scan' }))}
+              </div>
+            )}
+            {scanResult.result.unmatched.length > 0 && (
+              <div className="bg-white border border-line rounded-2xl p-3 space-y-2 mb-3">
+                <p className="text-[11px] font-bold text-muted">沒對上字典</p>
+                {scanResult.result.unmatched.map(line => (
+                  <div key={line} className="flex items-start justify-between gap-2 text-xs">
+                    <span className="text-ink break-words">{line}</span>
+                    <a className="shrink-0 text-accent font-bold" href={window.NanaFood ? window.NanaFood.translateUrl(line) : '#'}>用 Google 翻譯</a>
+                  </div>
+                ))}
+              </div>
+            )}
+            {scanResult.result.matched.length === 0 && scanResult.result.unmatched.length === 0 && (
+              <p className="text-xs text-muted text-center py-6">沒有辨識到可以對字典的文字。</p>
+            )}
+            <a href="https://lens.google.com/" className="block text-center w-full h-11 leading-[44px] rounded-2xl border border-deep text-deep text-sm font-bold">Google Lens</a>
+          </div>
+        </div>
+      ), document.body)}
+
+      {showAvoidSheet && ReactDOM.createPortal((
+        <div style={{ zIndex: 100 }} className="fixed inset-0 z-[70] flex items-end justify-center bg-deep/45" onClick={() => setShowAvoidSheet(false)}>
+          <form onSubmit={saveAvoids} onClick={e => e.stopPropagation()} style={{ background: '#fff' }} className="bg-white rounded-t-3xl w-full max-w-lg max-h-[88vh] overflow-y-auto px-5 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-serif font-bold text-lg text-deep">我不吃的食材</h3>
+              <button type="button" onClick={() => setShowAvoidSheet(false)} className="text-sm font-bold text-muted">取消</button>
+            </div>
+            <p className="text-[12px] text-muted leading-relaxed mb-3">設一次就好。這趟的菜若含這些，列表和掃描結果都會標紅。</p>
+            <div className="flex flex-wrap gap-2">
+              {AVOID_PRESETS.map(a => {
+                const on = avoidDraft.includes(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setAvoidDraft(on ? avoidDraft.filter(x => x !== a.id) : [...avoidDraft, a.id])}
+                    className={`px-3 py-1.5 rounded-full text-[12px] font-bold border ${on ? 'bg-deep text-white border-deep' : 'bg-white text-deep border-line'}`}
+                  >
+                    {a.id}
+                  </button>
+                );
+              })}
+            </div>
+            <label className="block mt-4">
+              <span className="text-xs font-bold text-deep block mb-1.5">自己加一項</span>
+              <input
+                value={avoidCustomDraft}
+                onChange={e => setAvoidCustomDraft(e.target.value)}
+                placeholder="例如：酒、羊肉"
+                className="w-full h-11 bg-[#f7f8f4] border border-line rounded-2xl px-3.5 text-sm"
+              />
+            </label>
+            <button type="submit" className="mt-4 w-full h-12 rounded-2xl bg-deep text-white text-sm font-bold">儲存</button>
+          </form>
+        </div>
+      ), document.body)}
+
+      {showDictSheet && ReactDOM.createPortal((
+        <div style={{ zIndex: 100 }} className="fixed inset-0 z-[70] flex items-end justify-center bg-deep/45" onClick={() => setShowDictSheet(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff' }} className="bg-white rounded-t-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto px-5 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-serif font-bold text-lg text-deep">字典來源</h3>
+              {foodPack && foodPack.sample ? <span className="px-2 py-0.5 rounded-full bg-[#f6efe2] text-[#8a6232] text-[11px] font-bold">範例</span> : null}
+            </div>
+            <p className="text-[12px] text-muted leading-relaxed mb-3">
+              每個國家一份 Google 試算表。這趟是{resolvedCountry}，所以自動用{resolvedCountry}那份，下載後可離線查。
+            </p>
+            <div className="rounded-2xl bg-[#f4f7f4] border border-line p-3 mb-3">
+              <div className="flex items-center justify-between gap-2">
+                <strong className="text-sm text-deep">{resolvedCountry}</strong>
+                <span className="text-[10px] font-bold text-accent">這趟自動選取</span>
+              </div>
+              <p className="text-[11px] text-muted mt-1">
+                {foodPack && foodPack.updatedAt && window.NanaFood
+                  ? `上次更新 ${window.NanaFood.fmtDictTime(foodPack.updatedAt)} · 已存入手機`
+                  : '尚未從試算表更新 · 先用內建字典'}
+              </p>
+              <button type="button" onClick={handleRefreshDict} disabled={dictBusy} className="mt-2 w-full h-10 rounded-2xl bg-deep text-white text-sm font-bold disabled:opacity-60">
+                {dictBusy ? '更新中…' : '更新字典'}
+              </button>
+              <label className="block mt-3">
+                <span className="text-[11px] font-bold text-deep block mb-1">{resolvedCountry}的試算表連結</span>
+                <input
+                  value={dictDraft[resolvedCountry] || ''}
+                  onChange={e => setDictDraft({ ...dictDraft, [resolvedCountry]: e.target.value })}
+                  placeholder="貼上試算表連結"
+                  inputMode="url"
+                  className="w-full h-10 bg-white border border-line rounded-xl px-3 text-[12px]"
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {['原文','中文名','說明','食材','辣度','標籤'].map(col => (
+                <span key={col} className="text-[10px] px-2 py-0.5 rounded-full bg-paper border border-line text-muted">{col}</span>
+              ))}
+            </div>
+            {(window.NanaFood ? window.NanaFood.DICT_COUNTRIES : []).filter(c => c !== resolvedCountry).map(c => (
+              <label key={c} className="block mb-2">
+                <span className="text-[11px] text-muted flex items-center justify-between">
+                  <span className="font-bold text-deep">{c}</span>
+                  {!String(dictDraft[c] || '').trim() ? <span>尚未貼上連結</span> : null}
+                </span>
+                <input
+                  value={dictDraft[c] || ''}
+                  onChange={e => setDictDraft({ ...dictDraft, [c]: e.target.value })}
+                  placeholder={`貼上${c}的試算表連結`}
+                  inputMode="url"
+                  className="mt-1 w-full h-10 bg-[#f7f8f4] border border-line rounded-xl px-3 text-[12px]"
+                />
+              </label>
+            ))}
+            <p className="text-[11px] text-muted leading-relaxed mt-1">現在列表裡的菜若標成範例，是內建字典。貼上連結並更新後，會換成你的試算表。第一列欄名要是上面那六個。</p>
+            <button
+              type="button"
+              onClick={() => { saveDictDraft(); setShowDictSheet(false); foodTriedRef.current = ''; }}
+              className="mt-3 w-full h-12 rounded-2xl border border-deep text-deep text-sm font-bold"
+            >
+              完成
+            </button>
+          </div>
+        </div>
+      ), document.body)}
+
+      {dishDetail && ReactDOM.createPortal((
+        <div style={{ zIndex: 100 }} className="fixed inset-0 z-[70] flex items-end justify-center bg-deep/45" onClick={() => setDishDetail(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff' }} className="bg-white rounded-t-3xl w-full max-w-lg max-h-[88vh] overflow-y-auto px-5 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-[11px] text-muted">{resolvedCountry}{foodPack && foodPack.sample ? ' · 範例字典' : ''}</p>
+                <h3 className="font-serif font-bold text-xl text-deep mt-0.5">{dishDetail.original}</h3>
+                <p className="text-sm text-muted">{dishDetail.zh}</p>
+              </div>
+              <button type="button" onClick={() => toggleFoodFav(dishDetail)} className={`text-xl ${isFoodFav(dishDetail) ? 'text-[#c4923e]' : 'text-muted'}`} aria-label="收藏">
+                {isFoodFav(dishDetail) ? '★' : '☆'}
+              </button>
+            </div>
+            <p className="text-[13px] text-ink leading-relaxed mt-3">{dishDetail.desc || '沒有說明'}</p>
+            <div className="mt-3 space-y-1 text-[12px] text-muted">
+              <p><span className="font-bold text-deep">食材</span>　{(dishDetail.ingredients || []).join('、') || '—'}</p>
+              <p><span className="font-bold text-deep">辣度</span>　{dishDetail.spice || '—'}</p>
+              <p><span className="font-bold text-deep">標籤</span>　{(dishDetail.tags || []).join('、') || '—'}</p>
+            </div>
+            {window.NanaFood && window.NanaFood.dishHits(dishDetail, avoidList).length > 0 && (
+              <div className="mt-3 text-[12px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+                含有你不吃的食材：{window.NanaFood.dishHits(dishDetail, avoidList).join('、')}
+              </div>
+            )}
+            <button type="button" onClick={() => openDishStaff(dishDetail)} className="mt-4 w-full h-12 rounded-2xl bg-deep text-white text-sm font-bold">給店員看</button>
+            <button type="button" onClick={() => setDishDetail(null)} className="mt-2 w-full h-10 text-sm font-bold text-muted">關閉</button>
+          </div>
+        </div>
+      ), document.body)}
+
+      {staffView && ReactDOM.createPortal((
+        <div style={{ zIndex: 110, background: '#f6f8f3' }} className="fixed inset-0 z-[80] bg-[#f6f8f3] overflow-y-auto">
+          <div className="min-h-[100dvh] flex flex-col px-5 pt-[max(12px,env(safe-area-inset-top))] pb-8">
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={() => setStaffView(null)} className="w-10 h-10 rounded-full bg-white border border-line grid place-items-center text-deep" aria-label="關閉">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24"><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
+              <h3 className="font-serif font-bold text-base text-deep">{staffView.title}</h3>
+              {staffView.sample ? <span className="px-2 py-0.5 rounded-full bg-[#f6efe2] text-[#8a6232] text-[11px] font-bold">範例</span> : <span className="w-10" />}
+            </div>
+            <div className="flex-1 flex flex-col items-center justify-center gap-8 py-10">
+              {(staffView.blocks || []).length === 0 ? (
+                <p className="text-sm text-muted">還沒有要給店員看的內容。先在「我不吃的食材」選幾項。</p>
+              ) : staffView.blocks.map((b, i) => (
+                <div key={i} className="text-center max-w-xs">
+                  <div className="flex justify-center mb-3"><AvoidPictogram kind={b.icon} /></div>
+                  <p className="text-[26px] leading-snug font-bold text-deep break-words">{b.local}</p>
+                  <p className="text-sm text-muted mt-1">{b.zh}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-center text-[11px] text-muted leading-relaxed">{staffView.foot}</p>
+          </div>
+        </div>
+      ), document.body)}
     </div>
   );
 };

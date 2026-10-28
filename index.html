@@ -143,16 +143,17 @@
           }
 
           if (data && Array.isArray(data.trips) && data.trips.length > 0) {
-            setTrips(data.trips);
-            localStorage.setItem(window.LOCAL_TRIPS_KEY, JSON.stringify(data.trips));
+            const next = window.normalizeTrips(data.trips);
+            setTrips(next);
+            localStorage.setItem(window.LOCAL_TRIPS_KEY, JSON.stringify(next));
           } else {
             const local = JSON.parse(localStorage.getItem(window.LOCAL_TRIPS_KEY) || '[]');
-            if (Array.isArray(local)) setTrips(local);
+            if (Array.isArray(local)) setTrips(window.normalizeTrips(local));
           }
         } catch (err) {
           try {
             const local = JSON.parse(localStorage.getItem(window.LOCAL_TRIPS_KEY) || '[]');
-            if (Array.isArray(local)) setTrips(local);
+            if (Array.isArray(local)) setTrips(window.normalizeTrips(local));
           } catch(e) {}
           showToast('⚠️ 已載入本機快取資料');
         } finally {
@@ -164,7 +165,7 @@
       useEffect(() => {
         try {
           const local = JSON.parse(localStorage.getItem(window.LOCAL_TRIPS_KEY) || '[]');
-          if (Array.isArray(local) && local.length > 0) setTrips(local);
+          if (Array.isArray(local) && local.length > 0) setTrips(window.normalizeTrips(local));
         } catch(e) {}
         loadAllData();
       }, []);
@@ -328,6 +329,10 @@
           places: tripPlaces,
           events: tripEvents,
           expenses: [],
+          country: '',
+          avoids: [],
+          avoidCustom: [],
+          foodFavs: [],
           checklists: {
             todo: [
               { id: 'td_1', text: '確認護照效期滿 6 個月以上 & 辦理簽證', done: false },

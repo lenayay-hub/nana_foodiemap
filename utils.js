@@ -6,6 +6,51 @@
 window.GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyKXiPyB0px2WYHW2l2CxeCID-yj2ixog9FezvrPYuzfgX9MSAtRcP-hqj3yQTTBbUi/exec';
 window.LOCAL_TRIPS_KEY = 'nana_superapp_trips_v1';
 
+// 菜單字典與 OCR 腳本：第一次掃描或打開「當地美食」才載入，不進首屏。
+window.loadNanaFood = function () {
+  if (window.NanaFood && window.NanaFood.ready) return Promise.resolve(window.NanaFood);
+  if (window.__nanaFoodPromise) return window.__nanaFoodPromise;
+  window.__nanaFoodPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'food-logic.js';
+    s.async = true;
+    s.onload = function () {
+      if (window.NanaFood && window.NanaFood.ready) resolve(window.NanaFood);
+      else reject(new Error('字典載入失敗'));
+    };
+    s.onerror = function () {
+      window.__nanaFoodPromise = null;
+      reject(new Error('字典載入失敗'));
+    };
+    document.head.appendChild(s);
+  });
+  return window.__nanaFoodPromise;
+};
+
+// 舊行程補上新欄位，不刪原本的地點、花費、備註或交通。
+window.normalizeTrips = function (list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(t => {
+    if (!t || typeof t !== 'object') return t;
+    const events = Array.isArray(t.events) ? t.events.map(ev => {
+      if (!ev || typeof ev !== 'object') return ev;
+      return {
+        ...ev,
+        bookingUrl: typeof ev.bookingUrl === 'string' ? ev.bookingUrl : (ev.bookingUrl ? String(ev.bookingUrl) : ''),
+        orderNo: typeof ev.orderNo === 'string' ? ev.orderNo : (ev.orderNo ? String(ev.orderNo) : '')
+      };
+    }) : t.events;
+    return {
+      ...t,
+      country: typeof t.country === 'string' ? t.country : '',
+      avoids: Array.isArray(t.avoids) ? t.avoids : [],
+      avoidCustom: Array.isArray(t.avoidCustom) ? t.avoidCustom : [],
+      foodFavs: Array.isArray(t.foodFavs) ? t.foodFavs : [],
+      events
+    };
+  });
+};
+
 // 🏷️ 分類設定
 window.categoriesData = {
   food: [
