@@ -422,6 +422,9 @@ window.TripWorkspace = function TripWorkspace({
   const [showScanSheet, setShowScanSheet] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
   const [scanResult, setScanResult] = useState(null);
+  const scanSourceRef = useRef(null);
+  const [scanCrop, setScanCrop] = useState({top:0,bottom:0,left:0,right:0});
+  const [scanOcrMode, setScanOcrMode] = useState('vie+eng');
   const [foodPack, setFoodPack] = useState(null);
   const [foodQuery, setFoodQuery] = useState('');
   const [foodFavOnly, setFoodFavOnly] = useState(false);
@@ -1509,9 +1512,11 @@ window.TripWorkspace = function TripWorkspace({
       const api = await window.loadNanaFood();
       const pack = foodPack && foodPack.country === resolvedCountry ? foodPack : api.packFromCache(resolvedCountry);
       if (!foodPack) setFoodPack(pack);
-      const canvas = await api.downscale(file);
+      const source = await api.downscale(file);
+      scanSourceRef.current = source;
+      const canvas = api.cropCanvas(source, scanCrop);
       const photo = canvas.toDataURL('image/jpeg', 0.72);
-      const ocr = await api.recognizeDetailed(canvas, api.ocrLangFor(resolvedCountry));
+      const ocr = await api.recognizeDetailed(canvas, resolvedCountry === '越南' ? scanOcrMode : api.ocrLangFor(resolvedCountry));
       const text = ocr.text;
       const items = api.scanLineItems(text,pack.dishes,resolvedCountry,ocr.lines);
       const usefulText = items.map(item=>item.original).join('\\n');
