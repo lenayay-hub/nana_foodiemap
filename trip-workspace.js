@@ -3434,6 +3434,23 @@ window.TripWorkspace = function TripWorkspace({
               <h3 className="font-serif font-bold text-lg text-deep">掃描結果</h3>
               <button type="button" onClick={() => setScanResult(null)} className="text-sm font-bold text-muted">關閉</button>
             </div>
+            <div className="bg-white rounded-2xl border border-line p-3 mb-3 space-y-2">
+              <p className="text-xs font-bold text-deep">菜單裁切與 OCR 比較</p>
+              <div className="grid grid-cols-2 gap-2">
+                {['top','bottom','left','right'].map(side => (
+                  <label key={side} className="text-[11px] text-muted">
+                    {({top:'裁掉上方',bottom:'裁掉下方',left:'裁掉左側',right:'裁掉右側'})[side]} {scanCrop[side]}%
+                    <input type="range" min="0" max="60" step="5" value={scanCrop[side]} onChange={e => setScanCrop(prev => ({...prev,[side]:Number(e.target.value)}))} className="w-full" />
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setScanOcrMode('vie+eng')} className="flex-1 rounded-xl bg-paper text-deep py-2 text-xs">越南文＋英文</button>
+                <button type="button" onClick={() => setScanOcrMode('eng')} className="flex-1 rounded-xl bg-paper text-deep py-2 text-xs">英文比較</button>
+              </div>
+              <button type="button" onClick={() => { if(scanSourceRef.current) scanSourceRef.current.toBlob(blob => { if(blob) handleScanFile(blob); },'image/png'); }} className="w-full rounded-xl bg-deep text-white py-2.5 text-xs font-bold">重新辨識</button>
+              <details className="text-[11px] text-muted"><summary>查看原始 OCR 文字</summary><pre className="whitespace-pre-wrap break-all max-h-40 overflow-auto">{scanResult.text}</pre></details>
+            </div>
             {scanResult.photo ? (
               <div className="relative w-full mb-3 rounded-2xl border border-line overflow-hidden bg-white">
                 <img src={scanResult.photo} alt="掃描的菜單與原位翻譯" className="block w-full h-auto" />
