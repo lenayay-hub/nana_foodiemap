@@ -235,21 +235,39 @@
     return { matched: matched, unmatched: unmatched };
   }
 
-  // Offline Vietnamese menu glossary. Word explanations are suggestions, not confirmed recipes.
-  const VN_WORDS = [['đặc biệt','特製'],['thập cẩm','什錦'],['hải sản','海鮮'],['bánh mì','越式麵包'],['nước mắm','魚露'],['hành phi','油蔥酥'],['hành lá','蔥'],['rau mùi','香菜'],['ngò rí','香菜'],['dưa leo','黃瓜'],['dưa chuột','黃瓜'],['bún','米線'],['phở','河粉'],['mì','麵'],['cơm','飯'],['bò','牛肉'],['heo','豬肉'],['gà','雞肉'],['tôm','蝦'],['cá','魚'],['rau','蔬菜'],['xào','炒'],['nướng','烤'],['chiên','炸'],['hấp','蒸'],['cay','辣']];
-  function explainLine(raw, dishes, country) {
-    const original = String(raw || '').trim();
-    const name = original.replace(/\\s+\\d[\\d.,]*\\s*(?:₫|đ|vnd)?\\s*$/i,'').trim();
-    const key = fold(name);
-    const list = Array.isArray(dishes) ? dishes : [];
-    const exact = list.find(d => fold(d.original) === key);
-    if (exact) return { original, zh:exact.zh, status:'known', dish:exact };
-    const contained = list.filter(d=>fold(d.original).length >= 5 && phraseHit(key,fold(d.original))).sort((a,b)=>fold(b.original).length-fold(a.original).length)[0];
-    if (contained && fold(contained.original).length >= key.length*.8) return {original,zh:contained.zh,status:'partial',dish:contained};
-    if (country !== '越南') return {original,zh:'',status:'unknown',dish:null};
-    const tokens=key.split(' '), used=new Set(), found=[];
-    VN_WORDS.slice().sort((a,b)=>fold(b[0]).length-fold(a[0]).length).forEach(([word,zh])=>{
-      const parts=fold(word).split(' ');
+  // Preserve Vietnamese vowel distinctions: bơ (avocado) is NOT bò (beef).
+  function vnKey(value) {
+    return String(value||'').normalize('NFC').toLocaleLowerCase('vi')
+      .replace(/[^\\p{L}\\p{N}\\s]/gu,' ').replace(/\\s+/g,' ').trim();
+  }
+  const VN_MENU = [
+    ['kem bơ','酪梨冰淇淋'],['cafe nâu','越式奶咖啡'],['cà phê nâu','越式奶咖啡'],
+    ['cafe đen','黑咖啡'],['cà phê đen','黑咖啡'],['cafe muối','鹽咖啡'],['cà phê muối','鹽咖啡'],
+    ['bạc xỉu','越式牛奶咖啡'],['bac xiu','越式牛奶咖啡'],['nước ép','鮮榨果汁'],
+    ['sinh tố','水果冰沙'],['táo dứa','蘋果鳳梨'],['cóc ổi','酸芒果與芭樂'],
+    ['dứa ổi','鳳梨芭樂'],['cam táo','柳橙蘋果'],['cam dứa','柳橙鳳梨'],
+    ['lê táo','梨子蘋果'],['lựu đào','石榴水蜜桃'],['chanh leo','百香果'],
+    ['dưa hấu','西瓜'],['mãng cầu','釋迦'],['cà rốt','胡蘿蔔'],
+    ['bưởi','柚子'],['xoài','芒果'],['dứa','鳳梨'],['táo','蘋果'],['đào','水蜜桃'],
+    ['cóc','酸芒果'],['ổi','芭樂'],['lựu','石榴'],['cam','柳橙'],['bơ','酪梨'],
+    ['bò','牛肉'],['heo','豬肉'],['gà','雞肉'],['tôm','蝦'],['cá','魚'],
+    ['bún','米線'],['phở','河粉'],['mì','麵'],['cơm','飯'],['xào','炒'],['nướng','烤'],
+    ['hành phi','油蔥酥'],['hành lá','蔥'],['rau mùi','香菜'],['dưa leo','黃瓜']
+  ];
+  const VN_MAP = new Map(VN_MENU.map(([v,zh])=>[vnKey(v),zh]));
+  function explainLine(raw,dishes,country) {
+    const original=String(raw||'').trim();
+    const name=original.replace(/\\s+\\d[\\d.,]*\\s*(?:₫|đ|vnd|k)?\\s*$/i,'').trim();
+    const key=vnKey(name);
+    const list=Array.isArray(dishes)?dishes:[];
+    // Curated exact names take precedence over tone-insensitive generic dictionary entries.
+    if(country==='越南' && VN_MAP.has(key))return {original,zh:VN_MAP.get(key),status:'known',dish:null};
+    const exact=list.find(d=>vnKey(d.original)===key);
+    if(exact)return {original,zh:exact.zh,status:'known',dish:exact};
+    if(country!=='越南')return {original,zh:'',status:'unknown',dish:null};
+    const tokens=key.split(' '), used=new Set(),found=[];
+    VN_MENU.slice().sort((a,b)=>vnKey(b[0]).split(' ').length-vnKey(a[0]).split(' ').length).forEach(([word,zh])=>{
+      const parts=vnKey(word).split(' ');
       for(let i=0;i<=tokens.length-parts.length;i++){
         if(parts.every((p,j)=>tokens[i+j]===p&&!used.has(i+j))){
           parts.forEach((_,j)=>used.add(i+j));found.push({i,zh});break;
@@ -257,24 +275,27 @@
       }
     });
     found.sort((a,b)=>a.i-b.i);
-    return {original,zh:found.map(w=>w.zh).join('・'),status:found.length?'guess':'unknown',dish:null};
+    // A lone common word within a long OCR line is not a trustworthy translation.
+    if(!found.length || (tokens.length>3 && found.reduce((n,w)=>n+1,0)<2))
+      return {original,zh:'',status:'unknown',dish:null};
+    return {original,zh:found.map(w=>w.zh).join('・'),status:'guess',dish:null};
   }
   function isMenuCandidate(text, confidence, hasDish) {
     const s=String(text||'').trim();
-    if(!s || s.length<4) return false;
+    if(!s || s.length<2) return false;
     if(/(?:michelin|recommendations|restaurant|cuisine|gourmand|vat|thuế|tax|service charge|giá chưa|đơn vị|vnd|www\\.|https?:|copyright)/i.test(s)) return false;
     if(/^[^\\p{L}]*$/u.test(s)) return false;
     const letters=(s.match(/\\p{L}/gu)||[]).length;
-    if(letters<4 || letters/s.length<.55) return false;
+    if(letters<2 || letters/s.length<.55) return false;
     if(!hasDish && Number.isFinite(confidence) && confidence<55) return false;
     if(!hasDish && /(?:[<>~^_=]|\\d{4}|[“”]{2})/.test(s)) return false;
-    if(!hasDish && s.split(/\\s+/).length===1 && s.length<7) return false;
+    if(!hasDish && s.split(/\\s+/).length===1 && s.length<3) return false;
     return true;
   }
   function scanLineItems(text,dishes,country,lines) {
     const input=Array.isArray(lines)&&lines.length?lines:String(text||'').split(/\\n+/).map(text=>({text}));
     return input.map(line=>({...explainLine(line.text,dishes,country),bbox:line.bbox||null,confidence:line.confidence}))
-      .filter(line=>isMenuCandidate(line.original,line.confidence,!!line.dish));
+      .filter(line=>isMenuCandidate(line.original,line.confidence,!!line.dish) && !!line.zh);
   }
   function ingredientStatus(dish,avoids) {
     if(!avoids||!avoids.length)return {state:'none',hits:[]};
