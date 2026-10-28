@@ -235,6 +235,42 @@
     return { matched: matched, unmatched: unmatched };
   }
 
+  // Offline Vietnamese menu glossary. Word explanations are suggestions, not confirmed recipes.
+  const VN_WORDS = [['đặc biệt','特製'],['thập cẩm','什錦'],['hải sản','海鮮'],['bánh mì','越式麵包'],['nước mắm','魚露'],['hành phi','油蔥酥'],['hành lá','蔥'],['rau mùi','香菜'],['ngò rí','香菜'],['dưa leo','黃瓜'],['dưa chuột','黃瓜'],['bún','米線'],['phở','河粉'],['mì','麵'],['cơm','飯'],['bò','牛肉'],['heo','豬肉'],['gà','雞肉'],['tôm','蝦'],['cá','魚'],['rau','蔬菜'],['xào','炒'],['nướng','烤'],['chiên','炸'],['hấp','蒸'],['cay','辣']];
+  function explainLine(raw, dishes, country) {
+    const original = String(raw || '').trim();
+    const name = original.replace(/\\s+\\d[\\d.,]*\\s*(?:₫|đ|vnd)?\\s*$/i,'').trim();
+    const key = fold(name);
+    const list = Array.isArray(dishes) ? dishes : [];
+    const exact = list.find(d => fold(d.original) === key);
+    if (exact) return { original, zh:exact.zh, status:'known', dish:exact };
+    const contained = list.filter(d=>fold(d.original).length >= 5 && phraseHit(key,fold(d.original))).sort((a,b)=>fold(b.original).length-fold(a.original).length)[0];
+    if (contained && fold(contained.original).length >= key.length*.8) return {original,zh:contained.zh,status:'partial',dish:contained};
+    if (country !== '越南') return {original,zh:'',status:'unknown',dish:null};
+    const tokens=key.split(' '), used=new Set(), found=[];
+    VN_WORDS.slice().sort((a,b)=>fold(b[0]).length-fold(a[0]).length).forEach(([word,zh])=>{
+      const parts=fold(word).split(' ');
+      for(let i=0;i<=tokens.length-parts.length;i++){
+        if(parts.every((p,j)=>tokens[i+j]===p&&!used.has(i+j))){
+          parts.forEach((_,j)=>used.add(i+j));found.push({i,zh});break;
+        }
+      }
+    });
+    found.sort((a,b)=>a.i-b.i);
+    return {original,zh:found.map(w=>w.zh).join('・'),status:found.length?'guess':'unknown',dish:null};
+  }
+  function scanLineItems(text,dishes,country,lines) {
+    const input=Array.isArray(lines)&&lines.length?lines:String(text||'').split(/\\n+/).map(text=>({text}));
+    return input.map(line=>({...explainLine(line.text,dishes,country),bbox:line.bbox||null}))
+      .filter(line=>line.original.length>1&&!/^[\\d\\s.,:;|/\\\\+\\-–—₫đ]+$/.test(line.original));
+  }
+  function ingredientStatus(dish,avoids) {
+    if(!avoids||!avoids.length)return {state:'none',hits:[]};
+    if(!dish)return {state:'unknown',hits:[]};
+    const hits=dishHits(dish,avoids);
+    return hits.length?{state:'contains',hits}:{state:'unknown',hits:[]};
+  }
+
   function translateUrl(text) {
     return 'https://translate.google.com/?sl=auto&tl=zh-TW&text=' + encodeURIComponent(text) + '&op=translate';
   }
@@ -280,7 +316,7 @@
     });
   }
 
-  async function recognize(canvas, lang) {
+  async function recognizeDetailed(canvas, lang) {
     const T = await loadTesseract();
     const useLang = lang || 'vie';
     if (!ocrWorker || ocrLang !== useLang) {
@@ -288,9 +324,21 @@
       ocrWorker = await T.createWorker(useLang, 1, { logger: function () {} });
       ocrLang = useLang;
     }
-    const result = await ocrWorker.recognize(canvas);
-    return (result && result.data && result.data.text) || '';
+    const result = await ocrWorker.recognize(canvas, {}, { blocks: true });
+    const data = result && result.data || {}, lines = [];
+    function collect(nodes) {
+      for(const n of nodes||[]) {
+        if(Array.isArray(n.blocks)) collect(n.blocks);
+        else if(Array.isArray(n.paragraphs)) collect(n.paragraphs);
+        else if(Array.isArray(n.lines)) collect(n.lines);
+        else if(n.text && n.bbox) lines.push({text:n.text.trim(),bbox:n.bbox});
+      }
+    }
+    collect(data.blocks);
+    if(!lines.length)collect(data.lines);
+    return {text:data.text||'',lines,width:canvas.width,height:canvas.height};
   }
+  async function recognize(canvas,lang) { return (await recognizeDetailed(canvas,lang)).text; }
 
   function fmtDictTime(iso) {
     if (!iso) return '';
@@ -332,6 +380,9 @@
     loadTesseract: loadTesseract,
     downscale: downscale,
     recognize: recognize,
+    recognizeDetailed: recognizeDetailed,
+    scanLineItems: scanLineItems,
+    ingredientStatus: ingredientStatus,
     fmtDictTime: fmtDictTime,
     searchDishes: searchDishes,
     ready: true
