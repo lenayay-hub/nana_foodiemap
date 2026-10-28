@@ -12,7 +12,7 @@ window.loadNanaFood = function () {
   if (window.__nanaFoodPromise) return window.__nanaFoodPromise;
   window.__nanaFoodPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'food-logic.js';
+    s.src = 'food-logic.js?v=20261028-ocr4';
     s.async = true;
     s.onload = function () {
       if (window.NanaFood && window.NanaFood.ready) resolve(window.NanaFood);
