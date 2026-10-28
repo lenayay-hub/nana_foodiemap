@@ -36,10 +36,14 @@ const AVOID_PRESETS = [
   { id: '牛肉', local: 'Tôi không ăn thịt bò', icon: 'beef' },
   { id: '花生', local: 'Tôi dị ứng với đậu phộng', icon: 'peanut' },
   { id: '海鮮', local: 'Tôi không ăn hải sản', icon: 'seafood' },
-  { id: '香菜', local: 'Tôi không ăn rau mùi', icon: 'herb' },
+  { id: '香菜', local: 'Xin đừng cho rau mùi (ngò rí) vào món ăn.', icon: 'herb' },
   { id: '蛋', local: 'Tôi không ăn trứng', icon: 'egg' },
   { id: '奶製品', local: 'Tôi không ăn sữa', icon: 'milk' },
-  { id: '不要辣', local: 'Tôi không ăn cay', icon: 'chili' }
+  { id: '不要辣', local: 'Xin đừng cho ớt hoặc gia vị cay vào món ăn.', icon: 'chili' },
+  { id: '油蔥', local: 'Xin đừng cho hành phi vào món ăn.', icon: 'herb' },
+  { id: '蔥', local: 'Xin đừng cho hành lá vào món ăn.', icon: 'herb' },
+  { id: '黃瓜', local: 'Xin đừng cho dưa leo vào món ăn.', icon: 'herb' },
+  { id: '青菜', local: 'Xin đừng cho rau vào món ăn.', icon: 'herb' }
 ];
 const COUNTRY_HINTS = [
   ['越南', /越南|河內|胡志明|峴港|會安|下龍|富國|內排|芽莊|大叻|Hà Nội|Ha Noi|Hanoi|Vietnam|Sài Gòn|Saigon|Da Nang|Đà Nẵng|Hạ Long|Phú Quốc|Nội Bài/gi],
@@ -1507,8 +1511,9 @@ window.TripWorkspace = function TripWorkspace({
       if (!foodPack) setFoodPack(pack);
       const canvas = await api.downscale(file);
       const photo = canvas.toDataURL('image/jpeg', 0.72);
-      const text = await api.recognize(canvas, api.ocrLangFor(resolvedCountry));
-      setScanResult({ photo, text, pack, result: api.matchLines(text, pack.dishes) });
+      const ocr = await api.recognizeDetailed(canvas, api.ocrLangFor(resolvedCountry));
+      const text = ocr.text;
+      setScanResult({ photo, text, pack, ocr, items:api.scanLineItems(text,pack.dishes,resolvedCountry,ocr.lines), result: api.matchLines(text, pack.dishes) });
     } catch (err) {
       if (showToast) showToast(err.message || '辨識失敗');
     } finally {
@@ -3422,10 +3427,27 @@ window.TripWorkspace = function TripWorkspace({
               <h3 className="font-serif font-bold text-lg text-deep">掃描結果</h3>
               <button type="button" onClick={() => setScanResult(null)} className="text-sm font-bold text-muted">關閉</button>
             </div>
-            {scanResult.photo ? <img src={scanResult.photo} alt="掃描的菜單" className="w-full max-h-36 object-cover rounded-2xl mb-3 border border-line" /> : null}
+            {scanResult.photo ? (
+              <div className="relative w-full mb-3 rounded-2xl border border-line overflow-hidden bg-white">
+                <img src={scanResult.photo} alt="掃描的菜單與原位翻譯" className="block w-full h-auto" />
+                {(scanResult.items||[]).filter(item=>item.bbox && item.zh).map((item,i)=>(
+                  <div key={i} style={{position:'absolute',left:Math.min(88,Math.max(0,item.bbox.x0/scanResult.ocr.width*100))+'%',top:Math.min(95,Math.max(0,item.bbox.y1/scanResult.ocr.height*100))+'%',maxWidth:'90%',zIndex:2}} className="rounded-md bg-[#f6f8f3]/95 border border-[#a5b9aa] text-[#23483c] text-[11px] leading-snug font-bold px-1.5 py-0.5 shadow-sm">
+                    {item.zh}{item.status==='guess'?'（推測）':''}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <p className="text-[11px] text-muted mb-2">中文直接標在原文下方。若菜單太密集，請看下面的逐行對照；辨識推測不代表食材已確認。</p>
+            {(scanResult.items||[]).length>0 && <div className="bg-white rounded-2xl border border-line p-3 space-y-2 mb-3">
+              {(scanResult.items||[]).map((item,i)=><div key={i} className="border-b border-line last:border-0 pb-2">
+                <div className="text-xs font-bold text-deep">{item.original}</div>
+                <div className="text-xs text-[#28745d] mt-0.5">{item.zh || '尚無可靠翻譯'}{item.status==='guess'?'（詞彙推測）':''}</div>
+                {avoidList.length>0 && <div className="text-[11px] mt-1 text-amber-700">{window.NanaFood?.ingredientStatus(item.dish,avoidList).state==='contains'?'⚠ 含有你不吃的食材：'+window.NanaFood.ingredientStatus(item.dish,avoidList).hits.join('、'):'食材未確認，點餐前請向店員確認'}</div>}
+              </div>)}
+            </div>}
             <p className="text-[11px] text-muted leading-relaxed mb-3">
               {scanResult.pack && scanResult.pack.sample ? '對上內建的越南字典。' : `對上${resolvedCountry}的字典。`}
-              紅色是你不吃的食材。聲調不同也算同一道菜。
+              紅色代表已知含有你不吃的食材；其他菜色的配料仍須確認。聲調不同也能比對。
               {scanResult.pack && scanResult.pack.sample ? <span className="ml-1 px-1.5 py-0.5 rounded-full bg-[#f6efe2] text-[#8a6232] font-bold">範例字典</span> : null}
             </p>
             {scanResult.result.matched.length > 0 && (
@@ -3460,7 +3482,7 @@ window.TripWorkspace = function TripWorkspace({
               <h3 className="font-serif font-bold text-lg text-deep">我不吃的食材</h3>
               <button type="button" onClick={() => setShowAvoidSheet(false)} className="text-sm font-bold text-muted">取消</button>
             </div>
-            <p className="text-[12px] text-muted leading-relaxed mb-3">設一次就好。這趟的菜若含這些，列表和掃描結果都會標紅。</p>
+            <p className="text-[12px] text-muted leading-relaxed mb-3">設一次就好。可選油蔥、蔥、香菜、黃瓜、青菜等；已知含有會提醒，資料不完整則標示待確認。</p>
             <div className="flex flex-wrap gap-2">
               {AVOID_PRESETS.map(a => {
                 const on = avoidDraft.includes(a.id);
