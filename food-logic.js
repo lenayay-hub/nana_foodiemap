@@ -354,10 +354,12 @@
     const right = Math.min(70, Math.max(0, Number(bounds.right) || 0)) / 100;
     const top = Math.min(70, Math.max(0, Number(bounds.top) || 0)) / 100;
     const bottom = Math.min(70, Math.max(0, Number(bounds.bottom) || 0)) / 100;
+    const safeRight = Math.min(right, Math.max(0, 0.95 - left));
+    const safeBottom = Math.min(bottom, Math.max(0, 0.95 - top));
     const x = Math.round(source.width * left);
     const y = Math.round(source.height * top);
-    const width = Math.max(1, Math.round(source.width * (1 - left - right)));
-    const height = Math.max(1, Math.round(source.height * (1 - top - bottom)));
+    const width = Math.max(1, Math.round(source.width * (1 - left - safeRight)));
+    const height = Math.max(1, Math.round(source.height * (1 - top - safeBottom)));
     const canvas = root.document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
