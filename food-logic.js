@@ -259,10 +259,22 @@
     found.sort((a,b)=>a.i-b.i);
     return {original,zh:found.map(w=>w.zh).join('・'),status:found.length?'guess':'unknown',dish:null};
   }
+  function isMenuCandidate(text, confidence, hasDish) {
+    const s=String(text||'').trim();
+    if(!s || s.length<4) return false;
+    if(/(?:michelin|recommendations|restaurant|cuisine|gourmand|vat|thuế|tax|service charge|giá chưa|đơn vị|vnd|www\\.|https?:|copyright)/i.test(s)) return false;
+    if(/^[^\\p{L}]*$/u.test(s)) return false;
+    const letters=(s.match(/\\p{L}/gu)||[]).length;
+    if(letters<4 || letters/s.length<.55) return false;
+    if(!hasDish && Number.isFinite(confidence) && confidence<55) return false;
+    if(!hasDish && /(?:[<>~^_=]|\\d{4}|[“”]{2})/.test(s)) return false;
+    if(!hasDish && s.split(/\\s+/).length===1 && s.length<7) return false;
+    return true;
+  }
   function scanLineItems(text,dishes,country,lines) {
     const input=Array.isArray(lines)&&lines.length?lines:String(text||'').split(/\\n+/).map(text=>({text}));
-    return input.map(line=>({...explainLine(line.text,dishes,country),bbox:line.bbox||null}))
-      .filter(line=>line.original.length>1&&!/^[\\d\\s.,:;|/\\\\+\\-–—₫đ]+$/.test(line.original));
+    return input.map(line=>({...explainLine(line.text,dishes,country),bbox:line.bbox||null,confidence:line.confidence}))
+      .filter(line=>isMenuCandidate(line.original,line.confidence,!!line.dish));
   }
   function ingredientStatus(dish,avoids) {
     if(!avoids||!avoids.length)return {state:'none',hits:[]};
@@ -300,7 +312,7 @@
       const img = new root.Image();
       const url = root.URL.createObjectURL(file);
       img.onload = () => {
-        const max = 1280;
+        const max = 2200;
         let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
         const scale = Math.min(1, max / Math.max(w, h));
         w = Math.max(1, Math.round(w * scale));
@@ -318,7 +330,7 @@
 
   async function recognizeDetailed(canvas, lang) {
     const T = await loadTesseract();
-    const useLang = lang || 'vie';
+    const useLang = lang === 'vie' ? 'vie+eng' : (lang || 'vie');
     if (!ocrWorker || ocrLang !== useLang) {
       if (ocrWorker) { try { await ocrWorker.terminate(); } catch (e) {} }
       ocrWorker = await T.createWorker(useLang, 1, { logger: function () {} });
@@ -331,7 +343,7 @@
         if(Array.isArray(n.blocks)) collect(n.blocks);
         else if(Array.isArray(n.paragraphs)) collect(n.paragraphs);
         else if(Array.isArray(n.lines)) collect(n.lines);
-        else if(n.text && n.bbox) lines.push({text:n.text.trim(),bbox:n.bbox});
+        else if(n.text && n.bbox) lines.push({text:n.text.trim(),bbox:n.bbox,confidence:n.confidence});
       }
     }
     collect(data.blocks);
